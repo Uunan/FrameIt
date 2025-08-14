@@ -1,4 +1,4 @@
-// --- START OF FILE main.js ---
+// --- START OF FILE main.js (MENÜ GERİ GETİRİLDİ) ---
 
 const { app, BrowserWindow, ipcMain, dialog, nativeImage, Menu } = require('electron');
 const path = require('path');
@@ -16,10 +16,7 @@ let controlPanelWindow;
 // =================================================================//
 // IPC KANALLARI (RENDERER İLE İLETİŞİM)
 // =================================================================//
-
-// ... (TÜM IPC HANDLER VE generateShortcut FONKSİYONLARI BURADA DEĞİŞMEDEN KALIYOR) ...
-// ...
-// ...
+// ... (Bu bölümün tamamı aynı, değişiklik yok) ...
 
 ipcMain.handle('open-file-dialog', async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog(controlPanelWindow, {
@@ -221,9 +218,10 @@ function createWebviewWindow(urlToLoad, appName) {
         event.preventDefault();
     });
     
-    if (process.platform !== 'darwin') {
-        webviewWindow.removeMenu();
-    }
+    // DEVRE DIŞI BIRAKILDI: Geliştirme sırasında menüyü görmek için bu satırı yorum satırı yapın
+    // if (process.platform !== 'darwin') {
+    //     webviewWindow.removeMenu();
+    // }
     
     webviewWindow.webContents.on('did-finish-load', () => {
         webviewWindow.webContents.send('set-url', urlToLoad);
@@ -239,9 +237,10 @@ function createControlPanel() {
         webPreferences: { preload: path.join(__dirname, 'preload.js'), nodeIntegration: false, contextIsolation: true, },
     });
     
-    if (process.platform !== 'darwin') {
-        controlPanelWindow.removeMenu();
-    }
+    // DEVRE DIŞI BIRAKILDI: Geliştirme sırasında menüyü görmek için bu satırı yorum satırı yapın
+    // if (process.platform !== 'darwin') {
+    //     controlPanelWindow.removeMenu();
+    // }
     
     controlPanelWindow.loadFile('index.html');
     controlPanelWindow.on('closed', () => { controlPanelWindow = null; });
@@ -258,21 +257,26 @@ const getArgValue = (argName) => {
     return value;
 };
 
-// ================= YENİ: LOGLAMA İÇİN YARDIMCI FONKSİYON =================
 function sendLogToUI(message) {
-    console.log(message); // Ana süreç konsoluna da yazdır
+    console.log(message);
     if (controlPanelWindow) {
         controlPanelWindow.webContents.send('update-log', message);
     }
 }
-// ========================================================================
 
-// UYGULAMA YAŞAM DÖNGÜSÜ
 app.whenReady().then(() => {
+    // macOS için menüyü burada zaten oluşturuyorduk, şimdi Windows/Linux için de varsayılan menü gelecek.
     if (process.platform === 'darwin') {
         const template = [{
             label: app.getName(),
             submenu: [{ role: 'quit' }]
+        }, {
+             label: "View",
+             submenu: [
+                { role: 'reload' },
+                { role: 'forceReload' },
+                { role: 'toggleDevTools' }, // Geliştirici araçları seçeneği
+             ]
         }];
         const menu = Menu.buildFromTemplate(template);
         Menu.setApplicationMenu(menu);
@@ -285,12 +289,10 @@ app.whenReady().then(() => {
         createWebviewWindow(urlToLoad, appNameToLoad);
     } else {
         createControlPanel();
-        // Sadece ana kontrol paneli açıldığında güncellemeleri kontrol et.
-        autoUpdater.checkForUpdates(); // Sadece kontrol et, bildirim gösterme. Olay dinleyicileri halledecek.
+        autoUpdater.checkForUpdates();
     }
 });
 
-// ================= YENİ: OTOMATİK GÜNCELLEME OLAYLARI VE LOGLAMA =================
 autoUpdater.on('checking-for-update', () => {
     sendLogToUI('Güncelleme kontrol ediliyor...');
 });
@@ -321,7 +323,6 @@ autoUpdater.on('update-downloaded', (info) => {
         if (returnValue.response === 0) autoUpdater.quitAndInstall();
     });
 });
-// =============================================================================
 
 
 app.on('activate', () => {
