@@ -1,4 +1,4 @@
-// --- START OF FILE main.js (MENÜ GERİ GETİRİLDİ) ---
+// --- START OF FILE main.js (TÜM GÜNCELLEMELER DAHİL) ---
 
 const { app, BrowserWindow, ipcMain, dialog, nativeImage, Menu } = require('electron');
 const path = require('path');
@@ -10,14 +10,18 @@ const Store = require('electron-store');
 const png2icons = require('png2icons');
 const { autoUpdater } = require('electron-updater');
 
+// =========================================================================
+// YENİ: BÜYÜK DOSYA İNDİRME HATALARINI (HTTP2) ÖNLEMEK İÇİN AYAR
+// =========================================================================
+autoUpdater.requestHeaders = { 'Accept': 'application/octet-stream' };
+// =========================================================================
+
 const store = new Store({ defaults: { apps: [] } });
 let controlPanelWindow;
 
 // =================================================================//
 // IPC KANALLARI (RENDERER İLE İLETİŞİM)
 // =================================================================//
-// ... (Bu bölümün tamamı aynı, değişiklik yok) ...
-
 ipcMain.handle('open-file-dialog', async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog(controlPanelWindow, {
         title: 'Özel İkon Seç',
@@ -217,16 +221,6 @@ function createWebviewWindow(urlToLoad, appName) {
     webviewWindow.on('page-title-updated', (event) => {
         event.preventDefault();
     });
-    
-    // DEVRE DIŞI BIRAKILDI: Geliştirme sırasında menüyü görmek için bu satırı yorum satırı yapın
-    // if (process.platform !== 'darwin') {
-    //     webviewWindow.removeMenu();
-    // }
-    
-    webviewWindow.webContents.on('did-finish-load', () => {
-        webviewWindow.webContents.send('set-url', urlToLoad);
-    });
-    webviewWindow.loadFile('webview.html');
 }
 
 function createControlPanel() {
@@ -236,11 +230,6 @@ function createControlPanel() {
         backgroundColor: '#1c1c1e',
         webPreferences: { preload: path.join(__dirname, 'preload.js'), nodeIntegration: false, contextIsolation: true, },
     });
-    
-    // DEVRE DIŞI BIRAKILDI: Geliştirme sırasında menüyü görmek için bu satırı yorum satırı yapın
-    // if (process.platform !== 'darwin') {
-    //     controlPanelWindow.removeMenu();
-    // }
     
     controlPanelWindow.loadFile('index.html');
     controlPanelWindow.on('closed', () => { controlPanelWindow = null; });
@@ -265,7 +254,6 @@ function sendLogToUI(message) {
 }
 
 app.whenReady().then(() => {
-    // macOS için menüyü burada zaten oluşturuyorduk, şimdi Windows/Linux için de varsayılan menü gelecek.
     if (process.platform === 'darwin') {
         const template = [{
             label: app.getName(),
@@ -275,7 +263,7 @@ app.whenReady().then(() => {
              submenu: [
                 { role: 'reload' },
                 { role: 'forceReload' },
-                { role: 'toggleDevTools' }, // Geliştirici araçları seçeneği
+                { role: 'toggleDevTools' },
              ]
         }];
         const menu = Menu.buildFromTemplate(template);
@@ -303,7 +291,7 @@ autoUpdater.on('update-not-available', (info) => {
     sendLogToUI('Güncelleme mevcut değil.');
 });
 autoUpdater.on('error', (err) => {
-    sendLogToUI('Güncelleme hatası: ' + (err.message || 'Bilinmeyen bir hata oluştu.'));
+    sendLogToUI('Güncelleme hatası: ' + (err ? (err.stack || err).toString() : 'Bilinmeyen Hata'));
 });
 autoUpdater.on('download-progress', (progressObj) => {
     let log_message = `İndirme hızı: ${Math.round(progressObj.bytesPerSecond / 1024)} KB/s`;
