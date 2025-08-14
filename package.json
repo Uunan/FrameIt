@@ -1,7 +1,7 @@
 
 {
   "name": "frameit",
-  "version": "1.1.0",
+  "version": "1.2.1",
   "description": "Favori web sitelerinizi tek bir tıkla bağımsız masaüstü uygulamalarına dönüştürün.",
   "main": "main.js",
   "author": "Uunan",
@@ -28,7 +28,7 @@
     "publish": {
       "provider": "github",
       "owner": "Uunan",
-      "repo": "FrameIt" 
+      "repo": "FrameIt"
     },
     "files": [
       "main.js",
@@ -40,9 +40,12 @@
     ],
     "mac": {
       "category": "public.app-category.productivity",
-      "target": "dmg",
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "icon": "build/icon.icns",
-      "identity": null 
+      "identity": null
     },
     "win": {
       "target": "nsis",
