@@ -1,3 +1,5 @@
+// --- START OF FILE renderer.js ---
+
 document.addEventListener('DOMContentLoaded', () => {
     // DOM Elementlerini Seç
     const appList = document.getElementById('app-list');
@@ -146,6 +148,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (currentMode === 'create') {
                 const data = { appName: appNameInput.value.trim(), appUrl: appUrlInput.value.trim() };
                 result = await window.electronAPI.createApp(data);
+
             } else {
                 let iconPathToSend;
                 if (iconChangedInEdit) {
@@ -197,5 +200,14 @@ document.addEventListener('DOMContentLoaded', () => {
     
     const pathBasename = (p) => p ? p.split(/[\\/]/).pop() : '';
 
+    // İlk yüklemede uygulama listesini doldur
     populateAppList();
+});
+
+// =========================================================================
+// YENİ: Otomatik güncelleme loglarını dinle ve geliştirici konsoluna yazdır
+// =========================================================================
+window.electronAPI.onUpdateLog((_event, message) => {
+    // Mesajları daha okunaklı yapmak için stilize edelim
+    console.log('%c[Updater]', 'color: cyan; font-weight: bold;', message);
 });

@@ -1,4 +1,4 @@
-// --- START OF FILE main.js (TÜM GÜNCELLEMELER DAHİL) ---
+// --- START OF FILE main.js ---
 
 const { app, BrowserWindow, ipcMain, dialog, nativeImage, Menu } = require('electron');
 const path = require('path');
@@ -8,7 +8,6 @@ const Jimp = require('jimp');
 const ws = require('windows-shortcuts');
 const Store = require('electron-store');
 const png2icons = require('png2icons');
-// YENİ: Otomatik güncelleme için electron-updater'ı dahil et
 const { autoUpdater } = require('electron-updater');
 
 const store = new Store({ defaults: { apps: [] } });
@@ -17,6 +16,10 @@ let controlPanelWindow;
 // =================================================================//
 // IPC KANALLARI (RENDERER İLE İLETİŞİM)
 // =================================================================//
+
+// ... (TÜM IPC HANDLER VE generateShortcut FONKSİYONLARI BURADA DEĞİŞMEDEN KALIYOR) ...
+// ...
+// ...
 
 ipcMain.handle('open-file-dialog', async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog(controlPanelWindow, {
@@ -97,7 +100,6 @@ ipcMain.handle('edit-app', async (event, { appId, appName, appUrl, customIconPat
     }
 });
 
-// ANA KISAYOL OLUŞTURMA FONKSİYONU
 async function generateShortcut(appName, appUrl, customIconPath = null) {
     const tempDir = path.join(app.getPath('temp'), `frameit-creator-${Date.now()}`);
     await fs.ensureDir(tempDir);
@@ -148,7 +150,6 @@ async function generateShortcut(appName, appUrl, customIconPath = null) {
     }
 }
 
-// PLATFORMA ÖZEL FONKSİYONLAR
 async function createMacShortcut(appName, appUrl, icnsPath) {
     const userApplicationsPath = path.join(app.getPath('home'), 'Applications');
     await fs.ensureDir(userApplicationsPath);
@@ -257,6 +258,15 @@ const getArgValue = (argName) => {
     return value;
 };
 
+// ================= YENİ: LOGLAMA İÇİN YARDIMCI FONKSİYON =================
+function sendLogToUI(message) {
+    console.log(message); // Ana süreç konsoluna da yazdır
+    if (controlPanelWindow) {
+        controlPanelWindow.webContents.send('update-log', message);
+    }
+}
+// ========================================================================
+
 // UYGULAMA YAŞAM DÖNGÜSÜ
 app.whenReady().then(() => {
     if (process.platform === 'darwin') {
@@ -275,39 +285,43 @@ app.whenReady().then(() => {
         createWebviewWindow(urlToLoad, appNameToLoad);
     } else {
         createControlPanel();
-        // YENİ: Sadece ana kontrol paneli açıldığında güncellemeleri kontrol et.
-        // Bu, her bir web uygulamasının güncelleme kontrolü yapmasını engeller.
-        autoUpdater.checkForUpdatesAndNotify();
+        // Sadece ana kontrol paneli açıldığında güncellemeleri kontrol et.
+        autoUpdater.checkForUpdates(); // Sadece kontrol et, bildirim gösterme. Olay dinleyicileri halledecek.
     }
 });
 
-// YENİ: OTOMATİK GÜNCELLEME OLAYLARI
-autoUpdater.on('update-available', () => {
-  console.log('Yeni bir güncelleme mevcut.');
+// ================= YENİ: OTOMATİK GÜNCELLEME OLAYLARI VE LOGLAMA =================
+autoUpdater.on('checking-for-update', () => {
+    sendLogToUI('Güncelleme kontrol ediliyor...');
 });
-
+autoUpdater.on('update-available', (info) => {
+    sendLogToUI(`Güncelleme bulundu: ${info.version}`);
+});
+autoUpdater.on('update-not-available', (info) => {
+    sendLogToUI('Güncelleme mevcut değil.');
+});
+autoUpdater.on('error', (err) => {
+    sendLogToUI('Güncelleme hatası: ' + (err.message || 'Bilinmeyen bir hata oluştu.'));
+});
+autoUpdater.on('download-progress', (progressObj) => {
+    let log_message = `İndirme hızı: ${Math.round(progressObj.bytesPerSecond / 1024)} KB/s`;
+    log_message = log_message + ` - İndirilen ${Math.round(progressObj.percent)}%`;
+    sendLogToUI(log_message);
+});
 autoUpdater.on('update-downloaded', (info) => {
-    console.log('Güncelleme indirildi, kuruluma hazır.');
-    // Kullanıcıya güncellemenin hazır olduğunu bildiren bir diyalog kutusu göster.
+    sendLogToUI(`Güncelleme indirildi: ${info.version}. Kurulum için yeniden başlatılacak.`);
     const dialogOpts = {
         type: 'info',
         buttons: ['Yeniden Başlat', 'Daha Sonra'],
         title: 'Uygulama Güncellemesi',
-        message: process.platform === 'win32' ? info.releaseNotes : info.releaseName,
-        detail: 'Yeni bir sürüm indirildi. Değişikliklerin etkili olması için uygulamayı şimdi yeniden başlatın.'
+        message: 'Yeni bir sürüm kuruluma hazır.',
+        detail: 'Değişikliklerin etkili olması için uygulamayı şimdi yeniden başlatın.'
     };
-
     dialog.showMessageBox(dialogOpts).then((returnValue) => {
-        // Eğer kullanıcı "Yeniden Başlat" butonuna tıklarsa (index 0)
-        if (returnValue.response === 0) {
-            autoUpdater.quitAndInstall();
-        }
+        if (returnValue.response === 0) autoUpdater.quitAndInstall();
     });
 });
-
-autoUpdater.on('error', (err) => {
-  console.error('Güncelleme hatası:', err ? (err.stack || err).toString() : 'Bilinmeyen Hata');
-});
+// =============================================================================
 
 
 app.on('activate', () => {

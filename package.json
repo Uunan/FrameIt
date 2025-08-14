@@ -41,7 +41,8 @@
     "mac": {
       "category": "public.app-category.productivity",
       "target": "dmg",
-      "icon": "build/icon.icns"
+      "icon": "build/icon.icns",
+      "identity": null 
     },
     "win": {
       "target": "nsis",
