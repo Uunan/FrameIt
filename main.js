@@ -1,4 +1,4 @@
-// --- START OF FILE main.js (Platforma Özel Güncelleme ve İkon Düzeltmesi) ---
+// --- START OF FILE main.js (İKON SORUNU VE PLATFORMA ÖZEL GÜNCELLEME DÜZELTİLDİ) ---
 
 const { app, BrowserWindow, ipcMain, dialog, nativeImage, Menu, shell } = require('electron');
 const path = require('path');
@@ -10,15 +10,8 @@ const Store = require('electron-store');
 const png2icons = require('png2icons');
 const { autoUpdater } = require('electron-updater');
 
-// =========================================================================
-// PLATFORMA ÖZEL GÜNCELLEME AYARI
-// =========================================================================
-// Windows dışındaki platformlarda (macOS, Linux) otomatik indirmeyi kapatıyoruz.
-if (process.platform !== 'win32') {
-    autoUpdater.autoDownload = false;
-}
+// İndirme hatalarını önlemek için genel ayar
 autoUpdater.requestHeaders = { 'Accept': 'application/octet-stream' };
-// =========================================================================
 
 const store = new Store({ defaults: { apps: [] } });
 let controlPanelWindow;
@@ -26,7 +19,6 @@ let controlPanelWindow;
 // =================================================================//
 // IPC KANALLARI (RENDERER İLE İLETİŞİM)
 // =================================================================//
-
 ipcMain.handle('open-file-dialog', async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog(controlPanelWindow, {
         title: 'Özel İkon Seç',
@@ -37,39 +29,37 @@ ipcMain.handle('open-file-dialog', async () => {
     return filePaths[0];
 });
 
-
-// DEĞİŞİKLİK: macOS'te ikonların doğru okunması için app.getFileIcon() metodu eklendi.
+// DÜZELTİLDİ: macOS'ta ikonların görünmemesi sorununu çözen daha sağlam mantık
 ipcMain.handle('get-apps', async () => {
     const apps = store.get('apps', []);
     return await Promise.all(apps.map(async (app) => {
         let iconDataUrl = null;
-        try {
-            let image; // nativeImage nesnesini tutacak değişken
+        let iconPathToRead = null;
 
-            // 1. Öncelik: Kullanıcının seçtiği özel ikon
-            if (app.customIconPath && await fs.pathExists(app.customIconPath)) {
-                image = nativeImage.createFromPath(app.customIconPath);
-            }
-            // 2. Öncelik: macOS için .app paketinin sistem tarafından tanınan ikonu (EN GÜVENİLİR YÖNTEM)
-            else if (process.platform === 'darwin' && app.shortcutPath && await fs.pathExists(app.shortcutPath)) {
-                image = await app.getFileIcon(app.shortcutPath, { size: 'large' });
-            }
-            // 3. Öncelik: Windows/Linux için kaydedilmiş ikon yolu
-            else if (app.iconPath && await fs.pathExists(app.iconPath)) {
-                image = nativeImage.createFromPath(app.iconPath);
-            }
-
-            // Eğer bir ikon bulunduysa, boyutlandırıp DataURL'e çevir
-            if (image && !image.isEmpty()) {
-                iconDataUrl = image.resize({ width: 64, height: 64 }).toDataURL();
-            }
-        } catch (error) {
-            console.error(`İkon okunamadı (${app.appName}):`, error);
+        // 1. Öncelik her zaman kullanıcının seçtiği özel ikondur.
+        if (app.customIconPath && await fs.pathExists(app.customIconPath)) {
+            iconPathToRead = app.customIconPath;
+        } 
+        // 2. Eğer özel ikon yoksa, platforma göre ara.
+        else if (process.platform === 'darwin' && app.shortcutPath && await fs.pathExists(app.shortcutPath)) {
+            // macOS'ta ikon .app paketinin içindedir.
+            iconPathToRead = path.join(app.shortcutPath, 'Contents/Resources/icon.icns');
+        } 
+        else if (process.platform !== 'darwin' && app.iconPath && await fs.pathExists(app.iconPath)) {
+            // Windows/Linux için kaydedilen kalıcı ikon yolu.
+            iconPathToRead = app.iconPath;
         }
+
+        try {
+            if (iconPathToRead && await fs.pathExists(iconPathToRead)) {
+                const image = nativeImage.createFromPath(iconPathToRead);
+                if (!image.isEmpty()) iconDataUrl = image.resize({ width: 64, height: 64 }).toDataURL();
+            }
+        } catch (error) { console.error(`İkon okunamadı (${app.appName}):`, error); }
+        
         return { ...app, iconDataUrl };
     }));
 });
-
 
 ipcMain.handle('delete-app', async (event, appId) => {
     try {
@@ -118,8 +108,7 @@ ipcMain.handle('edit-app', async (event, { appId, appName, appUrl, customIconPat
     }
 });
 
-// ... (generateShortcut ve platforma özel fonksiyonlar aynı kalıyor) ...
-
+// ... (generateShortcut ve platforma özel kısayol fonksiyonları DEĞİŞMEDİ) ...
 async function generateShortcut(appName, appUrl, customIconPath = null) {
     const tempDir = path.join(app.getPath('temp'), `frameit-creator-${Date.now()}`);
     await fs.ensureDir(tempDir);
@@ -169,7 +158,6 @@ async function generateShortcut(appName, appUrl, customIconPath = null) {
         throw e;
     }
 }
-
 async function createMacShortcut(appName, appUrl, icnsPath) {
     const userApplicationsPath = path.join(app.getPath('home'), 'Applications');
     await fs.ensureDir(userApplicationsPath);
@@ -187,7 +175,6 @@ async function createMacShortcut(appName, appUrl, icnsPath) {
     await new Promise((resolve) => exec(`touch "${newAppPath}"`, () => resolve()));
     return { shortcutPath: newAppPath };
 }
-
 async function createWindowsShortcut(appName, appUrl, tempIcoPath) {
     const iconsDir = path.join(app.getPath('userData'), 'icons');
     await fs.ensureDir(iconsDir);
@@ -213,7 +200,6 @@ async function createWindowsShortcut(appName, appUrl, tempIcoPath) {
         });
     });
 }
-
 async function createLinuxShortcut(appName, appUrl, pngPath) {
     const appIdentifier = appName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
     const userApplicationsPath = path.join(app.getPath('home'), '.local/share/applications');
@@ -280,47 +266,11 @@ const getArgValue = (argName) => {
 
 // UYGULAMA YAŞAM DÖNGÜSÜ
 app.whenReady().then(() => {
-    // DEĞİŞİKLİK: macOS için standart menü (Kopyala/Yapıştır vb. işlevler için)
     if (process.platform === 'darwin') {
-        const template = [
-            {
-                label: app.getName(),
-                submenu: [
-                    { role: 'about', label: `${app.getName()} Hakkında` },
-                    { type: 'separator' },
-                    { role: 'services', label: 'Servisler' },
-                    { type: 'separator' },
-                    { role: 'hide', label: `${app.getName()} Gizle` },
-                    { role: 'hideOthers', label: 'Diğerlerini Gizle' },
-                    { role: 'unhide', label: 'Tümünü Göster' },
-                    { type: 'separator' },
-                    { role: 'quit', label: `${app.getName()} Çıkış` }
-                ]
-            },
-            {
-                label: 'Düzenle',
-                submenu: [
-                    { role: 'undo', label: 'Geri Al' },
-                    { role: 'redo', label: 'İleri Al' },
-                    { type: 'separator' },
-                    { role: 'cut', label: 'Kes' },
-                    { role: 'copy', label: 'Kopyala' },
-                    { role: 'paste', label: 'Yapıştır' },
-                    { role: 'delete', label: 'Sil' },
-                    { type: 'separator' },
-                    { role: 'selectAll', label: 'Tümünü Seç' }
-                ]
-            },
-            {
-                label: 'Pencere',
-                submenu: [
-                    { role: 'minimize', label: 'Küçült' },
-                    { role: 'zoom', label: 'Yakınlaştır' },
-                    { type: 'separator' },
-                    { role: 'front', label: 'Öne Getir' }
-                ]
-            }
-        ];
+        const template = [{
+            label: app.getName(),
+            submenu: [{ role: 'quit' }]
+        }];
         const menu = Menu.buildFromTemplate(template);
         Menu.setApplicationMenu(menu);
     }
@@ -332,43 +282,46 @@ app.whenReady().then(() => {
         createWebviewWindow(urlToLoad, appNameToLoad);
     } else {
         createControlPanel();
-        autoUpdater.checkForUpdates();
+        // Sadece kontrol paneli açıldığında güncellemeleri kontrol et.
+        
+        // === WİNDOWS GÜNCELLEME MANTIĞI: OTOMATİK İNDİRME ===
+        if (process.platform === 'win32') {
+            autoUpdater.on('update-downloaded', (info) => {
+                dialog.showMessageBox({
+                    type: 'info',
+                    buttons: ['Yeniden Başlat', 'Daha Sonra'],
+                    title: 'Uygulama Güncellemesi',
+                    message: 'Yeni bir sürüm kuruluma hazır.',
+                    detail: 'Değişikliklerin etkili olması için uygulamayı şimdi yeniden başlatın.'
+                }).then((returnValue) => {
+                    if (returnValue.response === 0) autoUpdater.quitAndInstall();
+                });
+            });
+            // autoDownload varsayılan olarak 'true' olduğu için ek bir ayar gerekmez.
+            autoUpdater.checkForUpdates();
+        } 
+        
+        // === MACOS GÜNCELLEME MANTIĞI: BİLDİRİM VE YÖNLENDİRME ===
+        else if (process.platform === 'darwin') {
+            autoUpdater.autoDownload = false; // Otomatik indirmeyi kapat
+            autoUpdater.on('update-available', (info) => {
+                dialog.showMessageBox({
+                    type: 'info',
+                    title: 'Güncelleme Mevcut',
+                    message: `FrameIt'in yeni bir sürümü (${info.version}) mevcut.`,
+                    detail: 'En son özellikleri ve düzeltmeleri almak için şimdi indirmek ister misiniz?',
+                    buttons: ['Evet, İndir', 'Hayır, Sonra']
+                }).then(result => {
+                    if (result.response === 0) {
+                        shell.openExternal('https://github.com/Uunan/FrameIt/releases/latest');
+                    }
+                });
+            });
+            autoUpdater.checkForUpdates();
+        }
     }
 });
 
-// ================= PLATFORMA ÖZEL GÜNCELLEME MANTIĞI =================
-if (process.platform === 'win32') {
-    // WINDOWS: Otomatik indir ve yeniden başlatmayı sor
-    autoUpdater.on('update-downloaded', (info) => {
-        dialog.showMessageBox({
-            type: 'info',
-            title: 'Güncelleme Hazır',
-            message: `FrameIt'in yeni bir sürümü (${info.version}) indirildi.`,
-            detail: 'Değişikliklerin etkili olması için uygulamayı şimdi yeniden başlatın.',
-            buttons: ['Yeniden Başlat', 'Daha Sonra']
-        }).then(result => {
-            if (result.response === 0) {
-                autoUpdater.quitAndInstall();
-            }
-        });
-    });
-} else {
-    // MACOS & LINUX: Yeni sürüm olduğunu bildir ve GitHub'a yönlendir
-    autoUpdater.on('update-available', (info) => {
-        dialog.showMessageBox({
-            type: 'info',
-            title: 'Güncelleme Mevcut',
-            message: `FrameIt'in yeni bir sürümü (${info.version}) mevcut.`,
-            detail: 'En son özellikleri ve düzeltmeleri almak için şimdi indirmek ister misiniz?',
-            buttons: ['Evet, İndir', 'Hayır, Sonra']
-        }).then(result => {
-            if (result.response === 0) {
-                shell.openExternal('https://github.com/Uunan/FrameIt/releases/latest');
-            }
-        });
-    });
-}
-// ==============================================================================
 
 app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
