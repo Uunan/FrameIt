@@ -16,9 +16,8 @@ let controlPanelWindow;
 // =================================================================//
 // IPC KANALLARI (RENDERER İLE İLETİŞİM)
 // =================================================================//
-
+// ... (Bu kısımlarda değişiklik yok, hepsi doğru çalışıyor) ...
 ipcMain.handle('open-file-dialog', async () => {
-    // ... (değişmedi)
     const { canceled, filePaths } = await dialog.showOpenDialog(controlPanelWindow, {
         title: 'Özel İkon Seç',
         properties: ['openFile'],
@@ -29,7 +28,6 @@ ipcMain.handle('open-file-dialog', async () => {
 });
 
 ipcMain.handle('get-apps', async () => {
-    // ... (değişmedi)
     const apps = store.get('apps', []);
     return await Promise.all(apps.map(async (app) => {
         let iconDataUrl = null;
@@ -46,7 +44,6 @@ ipcMain.handle('get-apps', async () => {
 });
 
 ipcMain.handle('delete-app', async (event, appId) => {
-    // ... (değişmedi)
     try {
         const apps = store.get('apps');
         const appToDelete = apps.find(app => app.id === appId);
@@ -62,7 +59,6 @@ ipcMain.handle('delete-app', async (event, appId) => {
 });
 
 ipcMain.handle('create-app', async (event, { appName, appUrl }) => {
-    // ... (değişmedi)
     try {
         const paths = await generateShortcut(appName, appUrl, null);
         const newApp = { id: Date.now().toString(), appName, appUrl, ...paths };
@@ -76,7 +72,6 @@ ipcMain.handle('create-app', async (event, { appName, appUrl }) => {
 });
 
 ipcMain.handle('edit-app', async (event, { appId, appName, appUrl, customIconPath }) => {
-    // ... (değişmedi)
     try {
         const apps = store.get('apps');
         const appIndex = apps.findIndex(app => app.id === appId);
@@ -101,7 +96,6 @@ ipcMain.handle('edit-app', async (event, { appId, appName, appUrl, customIconPat
 });
 
 ipcMain.on('set-background-color', (event, color) => {
-    // ... (değişmedi)
     const window = BrowserWindow.fromWebContents(event.sender);
     if (window && color) {
         window.setBackgroundColor(color);
@@ -109,7 +103,7 @@ ipcMain.on('set-background-color', (event, color) => {
 });
 
 async function generateShortcut(appName, appUrl, customIconPath = null) {
-    // ... (değişmedi)
+    // ... (değişiklik yok)
     const tempDir = path.join(app.getPath('temp'), `frameit-creator-${Date.now()}`);
     const iconsDir = path.join(app.getPath('userData'), 'icons');
     await fs.ensureDir(tempDir);
@@ -168,8 +162,7 @@ async function generateShortcut(appName, appUrl, customIconPath = null) {
     }
 }
 
-async function createMacShortcut(appName, appUrl, icnsPath) {
-    // ... (değişmedi)
+async function createMacShortcut(appName, appUrl, icnsPath) { /* ... (değişiklik yok) ... */ 
     const userApplicationsPath = path.join(app.getPath('home'), 'Applications');
     await fs.ensureDir(userApplicationsPath);
     const newAppPath = path.join(userApplicationsPath, `${appName}.app`);
@@ -187,9 +180,7 @@ async function createMacShortcut(appName, appUrl, icnsPath) {
     await new Promise((resolve) => exec(`touch "${newAppPath}"`, () => resolve()));
     return { shortcutPath: newAppPath, iconPath: finalIconPath };
 }
-
-async function createWindowsShortcut(appName, appUrl, tempIcoPath) {
-    // ... (değişmedi)
+async function createWindowsShortcut(appName, appUrl, tempIcoPath) { /* ... (değişiklik yok) ... */ 
     const iconsDir = path.join(app.getPath('userData'), 'icons');
     await fs.ensureDir(iconsDir);
     const permanentIcoPath = path.join(iconsDir, `${Date.now()}-${appName.replace(/[^a-zA-Z0-9]/g, '')}.ico`);
@@ -214,9 +205,7 @@ async function createWindowsShortcut(appName, appUrl, tempIcoPath) {
         });
     });
 }
-
-async function createLinuxShortcut(appName, appUrl, pngPath) {
-    // ... (değişmedi)
+async function createLinuxShortcut(appName, appUrl, pngPath) { /* ... (değişiklik yok) ... */ 
     const appIdentifier = appName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
     const userApplicationsPath = path.join(app.getPath('home'), '.local/share/applications');
     const iconDir = path.join(app.getPath('home'), '.local/share/icons/hicolor/256x256/apps');
@@ -231,8 +220,7 @@ async function createLinuxShortcut(appName, appUrl, pngPath) {
     return { shortcutPath, iconPath: finalPngPath };
 }
 
-function createWebviewWindow(urlToLoad, appName) {
-    // ... (değişmedi)
+function createWebviewWindow(urlToLoad, appName) { /* ... (değişiklik yok) ... */ 
     const webviewWindow = new BrowserWindow({
         width: 1280, height: 800, minWidth: 800, minHeight: 600,
         title: appName,
@@ -248,9 +236,7 @@ function createWebviewWindow(urlToLoad, appName) {
         query: { url: encodeURIComponent(urlToLoad) }
     });
 }
-
-function createControlPanel() {
-    // ... (değişmedi)
+function createControlPanel() { /* ... (değişiklik yok) ... */ 
     controlPanelWindow = new BrowserWindow({
         width: 800, height: 600, minWidth: 600, minHeight: 400,
         title: "FrameIt Yöneticisi",
@@ -266,8 +252,7 @@ function createControlPanel() {
     controlPanelWindow.on('closed', () => { controlPanelWindow = null; });
 }
 
-const getArgValue = (argName) => {
-    // ... (değişmedi)
+const getArgValue = (argName) => { /* ... (değişiklik yok) ... */ 
     const prefix = `--${argName}=`;
     const arg = process.argv.find(arg => arg.startsWith(prefix));
     if (!arg) return null;
@@ -278,65 +263,25 @@ const getArgValue = (argName) => {
     return value;
 };
 
+// UYGULAMA YAŞAM DÖNGÜSÜ
 app.whenReady().then(() => {
-    // ... (değişmedi)
+    // ... (macOS menüsü kısmı aynı) ...
     if (process.platform === 'darwin') {
         const template = [
-            {
-                label: app.getName(),
-                submenu: [
-                    { role: 'about', label: `${app.getName()} Hakkında` },
-                    { type: 'separator' },
-                    { role: 'services', label: 'Servisler' },
-                    { type: 'separator' },
-                    { role: 'hide', label: `${app.getName()} Gizle` },
-                    { role: 'hideOthers', label: 'Diğerlerini Gizle' },
-                    { role: 'unhide', label: 'Tümünü Göster' },
-                    { type: 'separator' },
-                    { role: 'quit', label: `${app.getName()} Çıkış` }
-                ]
-            },
-            {
-                label: 'Düzenle',
-                submenu: [
-                    { role: 'undo', label: 'Geri Al' },
-                    { role: 'redo', label: 'İleri Al' },
-                    { type: 'separator' },
-                    { role: 'cut', label: 'Kes' },
-                    { role: 'copy', label: 'Kopyala' },
-                    { role: 'paste', label: 'Yapıştır' },
-                    { role: 'selectAll', label: 'Tümünü Seç' }
-                ]
-            },
-            {
-                label: 'Görünüm',
-                submenu: [
-                    { role: 'reload', label: 'Yeniden Yükle' },
-                    { role: 'forceReload', label: 'Zorla Yeniden Yükle' },
-                    { role: 'toggleDevTools', label: 'Geliştirici Araçlarını Aç/Kapat' },
-                    { type: 'separator' },
-                    { role: 'resetZoom', label: 'Normal Boyut' },
-                    { role: 'zoomIn', label: 'Yakınlaştır' },
-                    { role: 'zoomOut', label: 'Uzaklaştır' },
-                    { type: 'separator' },
-                    { role: 'togglefullscreen', label: 'Tam Ekran' }
-                ]
-            },
-            {
-                role: 'window',
-                label: 'Pencere',
-                submenu: [
-                    { role: 'minimize', label: 'Küçült' },
-                    { role: 'close', label: 'Kapat' }
-                ]
-            }
+            { label: app.getName(), submenu: [ { role: 'about', label: `${app.getName()} Hakkında` }, { type: 'separator' }, { role: 'services', label: 'Servisler' }, { type: 'separator' }, { role: 'hide', label: `${app.getName()} Gizle` }, { role: 'hideOthers', label: 'Diğerlerini Gizle' }, { role: 'unhide', label: 'Tümünü Göster' }, { type: 'separator' }, { role: 'quit', label: `${app.getName()} Çıkış` } ] },
+            { label: 'Düzenle', submenu: [ { role: 'undo', label: 'Geri Al' }, { role: 'redo', label: 'İleri Al' }, { type: 'separator' }, { role: 'cut', label: 'Kes' }, { role: 'copy', label: 'Kopyala' }, { role: 'paste', label: 'Yapıştır' }, { role: 'selectAll', label: 'Tümünü Seç' } ] },
+            { label: 'Görünüm', submenu: [ { role: 'reload', label: 'Yeniden Yükle' }, { role: 'forceReload', label: 'Zorla Yeniden Yükle' }, { role: 'toggleDevTools', label: 'Geliştirici Araçlarını Aç/Kapat' }, { type: 'separator' }, { role: 'resetZoom', label: 'Normal Boyut' }, { role: 'zoomIn', label: 'Yakınlaştır' }, { role: 'zoomOut', label: 'Uzaklaştır' }, { type: 'separator' }, { role: 'togglefullscreen', label: 'Tam Ekran' } ] },
+            { role: 'window', label: 'Pencere', submenu: [ { role: 'minimize', label: 'Küçült' }, { role: 'close', label: 'Kapat' } ] }
         ];
         const menu = Menu.buildFromTemplate(template);
         Menu.setApplicationMenu(menu);
     }
 
     const urlToLoad = getArgValue('url');
-    const appNameToLoad = get_ArgValue('app-name');
+    // ==========================================================
+    // !!!!!! TEK DEĞİŞİKLİK BURADA !!!!!!
+    // ==========================================================
+    const appNameToLoad = getArgValue('app-name'); // DÜZELTME: get_ArgValue -> getArgValue
 
     if (urlToLoad && appNameToLoad) {
         createWebviewWindow(urlToLoad, appNameToLoad);
@@ -350,8 +295,8 @@ app.whenReady().then(() => {
     }
 });
 
+// ... (Geri kalan tüm app event'leri ve autoUpdater event'leri aynı, değişiklik yok) ...
 autoUpdater.on('update-available', (info) => {
-    // ... (değişmedi)
     console.log('Yeni bir güncelleme mevcut:', info.version);
     if (process.platform === 'darwin') {
         const ignoredVersion = store.get('ignoredUpdateVersion');
@@ -379,7 +324,6 @@ autoUpdater.on('update-available', (info) => {
 });
 
 autoUpdater.on('update-downloaded', (info) => {
-    // ... (değişmedi)
     if (process.platform !== 'win32') return;
     console.log('Güncelleme indirildi, kuruluma hazır.');
     const dialogOpts = {
@@ -397,12 +341,10 @@ autoUpdater.on('update-downloaded', (info) => {
 });
 
 autoUpdater.on('error', (err) => {
-    // ... (değişmedi)
     console.error('Güncelleme hatası:', err ? (err.stack || err).toString() : 'Bilinmeyen Hata');
 });
 
 app.on('activate', () => {
-    // ... (değişmedi)
     if (BrowserWindow.getAllWindows().length === 0) {
         const urlToLoad = getArgValue('url');
         if (!urlToLoad) {
@@ -411,7 +353,6 @@ app.on('activate', () => {
     }
 });
 
-// YENİ DÜZENLEME: Bu blok değiştirildi.
 app.on('window-all-closed', () => {
     app.quit();
 });
