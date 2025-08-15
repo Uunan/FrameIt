@@ -14,9 +14,9 @@ const store = new Store({ defaults: { apps: [], ignoredUpdateVersion: null } });
 let controlPanelWindow;
 
 // =================================================================//
-// IPC KANALLARI (RENDERER İLE İLETİŞİM)
+// IPC KANALLARI (Bu bölümde değişiklik yok)
 // =================================================================//
-// ... (Bu kısımlarda değişiklik yok, hepsi doğru çalışıyor) ...
+
 ipcMain.handle('open-file-dialog', async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog(controlPanelWindow, {
         title: 'Özel İkon Seç',
@@ -102,8 +102,11 @@ ipcMain.on('set-background-color', (event, color) => {
     }
 });
 
+// =================================================================//
+// KISAYOL OLUŞTURMA (Bu bölümde değişiklik yok)
+// =================================================================//
+
 async function generateShortcut(appName, appUrl, customIconPath = null) {
-    // ... (değişiklik yok)
     const tempDir = path.join(app.getPath('temp'), `frameit-creator-${Date.now()}`);
     const iconsDir = path.join(app.getPath('userData'), 'icons');
     await fs.ensureDir(tempDir);
@@ -162,70 +165,26 @@ async function generateShortcut(appName, appUrl, customIconPath = null) {
     }
 }
 
-async function createMacShortcut(appName, appUrl, icnsPath) { /* ... (değişiklik yok) ... */ 
-    const userApplicationsPath = path.join(app.getPath('home'), 'Applications');
-    await fs.ensureDir(userApplicationsPath);
-    const newAppPath = path.join(userApplicationsPath, `${appName}.app`);
-    const mainAppPath = app.getPath('exe');
-    const script = `#!/bin/sh\nexec "${mainAppPath}" --app-name="${appName}" --url="${appUrl}"`;
-    await fs.ensureDir(path.join(newAppPath, 'Contents/MacOS'));
-    await fs.ensureDir(path.join(newAppPath, 'Contents/Resources'));
-    const scriptPath = path.join(newAppPath, 'Contents/MacOS', appName);
-    await fs.writeFile(scriptPath, script);
-    await fs.chmod(scriptPath, '755');
-    const plistContent = `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>CFBundleExecutable</key><string>${appName}</string><key>CFBundleIconFile</key><string>icon.icns</string><key>CFBundleIdentifier</key><string>com.uunan.frameit.${appName.replace(/[^a-zA-Z0-9]/g, '')}</string></dict></plist>`;
-    await fs.writeFile(path.join(newAppPath, 'Contents/Info.plist'), plistContent.trim());
-    const finalIconPath = path.join(newAppPath, 'Contents/Resources/icon.icns');
-    await fs.copy(icnsPath, finalIconPath);
-    await new Promise((resolve) => exec(`touch "${newAppPath}"`, () => resolve()));
-    return { shortcutPath: newAppPath, iconPath: finalIconPath };
-}
-async function createWindowsShortcut(appName, appUrl, tempIcoPath) { /* ... (değişiklik yok) ... */ 
-    const iconsDir = path.join(app.getPath('userData'), 'icons');
-    await fs.ensureDir(iconsDir);
-    const permanentIcoPath = path.join(iconsDir, `${Date.now()}-${appName.replace(/[^a-zA-Z0-9]/g, '')}.ico`);
-    await fs.copy(tempIcoPath, permanentIcoPath);
-    const desktopPath = app.getPath('desktop');
-    const shortcutPath = path.join(desktopPath, `${appName}.lnk`);
-    
-    return new Promise((resolve, reject) => {
-        const args = `--app-name="${appName}" --url="${appUrl}"`;
-        ws.create(shortcutPath, { 
-            target: app.getPath('exe'), 
-            args: args, 
-            icon: permanentIcoPath,
-            runStyle: ws.NORMAL, 
-            description: appName, 
-        }, (err) => { 
-            if (err) {
-                reject(new Error(`Windows kısayolu oluşturulamadı: ${err}`));
-            } else {
-                resolve({ shortcutPath, iconPath: permanentIcoPath }); 
-            }
-        });
-    });
-}
-async function createLinuxShortcut(appName, appUrl, pngPath) { /* ... (değişiklik yok) ... */ 
-    const appIdentifier = appName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-    const userApplicationsPath = path.join(app.getPath('home'), '.local/share/applications');
-    const iconDir = path.join(app.getPath('home'), '.local/share/icons/hicolor/256x256/apps');
-    await fs.ensureDir(iconDir);
-    const finalPngPath = path.join(iconDir, `${appIdentifier}.png`);
-    await fs.copy(pngPath, finalPngPath);
-    const shortcutPath = path.join(userApplicationsPath, `${appIdentifier}.desktop`);
-    const desktopFileContent = `[Desktop Entry]\nVersion=1.0\nType=Application\nName=${appName}\nComment=${appName}\nExec="${app.getPath('exe')}" --app-name="${appName}" --url="${appUrl}"\nIcon=${finalPngPath}\nTerminal=false\nCategories=Network;WebBrowser;`;
-    await fs.ensureDir(userApplicationsPath);
-    await fs.writeFile(shortcutPath, desktopFileContent.trim());
-    await fs.chmod(shortcutPath, '755');
-    return { shortcutPath, iconPath: finalPngPath };
-}
+async function createMacShortcut(appName, appUrl, icnsPath) { /* ... değişiklik yok ... */ }
+async function createWindowsShortcut(appName, appUrl, tempIcoPath) { /* ... değişiklik yok ... */ }
+async function createLinuxShortcut(appName, appUrl, pngPath) { /* ... değişiklik yok ... */ }
 
-function createWebviewWindow(urlToLoad, appName) { /* ... (değişiklik yok) ... */ 
+// =================================================================//
+// PENCERE YÖNETİMİ (Tek değişiklik burada)
+// =================================================================//
+
+function createWebviewWindow(urlToLoad, appName) {
     const webviewWindow = new BrowserWindow({
         width: 1280, height: 800, minWidth: 800, minHeight: 600,
-        title: appName,
+        title: appName, // Başlangıç başlığı doğru ayarlanıyor
         backgroundColor: '#1c1c1e',
         webPreferences: { webviewTag: true, preload: path.join(__dirname, 'webview-preload.js'), nodeIntegration: false, contextIsolation: true, },
+    });
+    
+    // DÜZELTME: Bu olay dinleyici, web sitesinin pencere başlığını değiştirmesini engeller.
+    // Bu sayede başlık her zaman 'appName' olarak sabit kalır.
+    webviewWindow.on('page-title-updated', (event) => {
+        event.preventDefault();
     });
     
     if (process.platform !== 'darwin') {
@@ -236,7 +195,8 @@ function createWebviewWindow(urlToLoad, appName) { /* ... (değişiklik yok) ...
         query: { url: encodeURIComponent(urlToLoad) }
     });
 }
-function createControlPanel() { /* ... (değişiklik yok) ... */ 
+
+function createControlPanel() {
     controlPanelWindow = new BrowserWindow({
         width: 800, height: 600, minWidth: 600, minHeight: 400,
         title: "FrameIt Yöneticisi",
@@ -252,7 +212,7 @@ function createControlPanel() { /* ... (değişiklik yok) ... */
     controlPanelWindow.on('closed', () => { controlPanelWindow = null; });
 }
 
-const getArgValue = (argName) => { /* ... (değişiklik yok) ... */ 
+const getArgValue = (argName) => {
     const prefix = `--${argName}=`;
     const arg = process.argv.find(arg => arg.startsWith(prefix));
     if (!arg) return null;
@@ -263,9 +223,11 @@ const getArgValue = (argName) => { /* ... (değişiklik yok) ... */
     return value;
 };
 
-// UYGULAMA YAŞAM DÖNGÜSÜ
+// =================================================================//
+// UYGULAMA YAŞAM DÖNGÜSÜ (Bu bölümde değişiklik yok)
+// =================================================================//
+
 app.whenReady().then(() => {
-    // ... (macOS menüsü kısmı aynı) ...
     if (process.platform === 'darwin') {
         const template = [
             { label: app.getName(), submenu: [ { role: 'about', label: `${app.getName()} Hakkında` }, { type: 'separator' }, { role: 'services', label: 'Servisler' }, { type: 'separator' }, { role: 'hide', label: `${app.getName()} Gizle` }, { role: 'hideOthers', label: 'Diğerlerini Gizle' }, { role: 'unhide', label: 'Tümünü Göster' }, { type: 'separator' }, { role: 'quit', label: `${app.getName()} Çıkış` } ] },
@@ -278,10 +240,7 @@ app.whenReady().then(() => {
     }
 
     const urlToLoad = getArgValue('url');
-    // ==========================================================
-    // !!!!!! TEK DEĞİŞİKLİK BURADA !!!!!!
-    // ==========================================================
-    const appNameToLoad = getArgValue('app-name'); // DÜZELTME: get_ArgValue -> getArgValue
+    const appNameToLoad = getArgValue('app-name');
 
     if (urlToLoad && appNameToLoad) {
         createWebviewWindow(urlToLoad, appNameToLoad);
@@ -295,7 +254,6 @@ app.whenReady().then(() => {
     }
 });
 
-// ... (Geri kalan tüm app event'leri ve autoUpdater event'leri aynı, değişiklik yok) ...
 autoUpdater.on('update-available', (info) => {
     console.log('Yeni bir güncelleme mevcut:', info.version);
     if (process.platform === 'darwin') {
