@@ -1,4 +1,4 @@
-// --- START OF FILE main.js (NİHAİ SÜRÜM) ---
+// --- START OF FILE main.js (NİHAİ SÜRÜM + YÜKLEME EKRANI) ---
 
 const { app, BrowserWindow, ipcMain, dialog, nativeImage, Menu, shell } = require('electron');
 const path = require('path');
@@ -112,7 +112,6 @@ async function generateShortcut(appName, appUrl, customIconPath = null) {
     await fs.ensureDir(tempDir);
     await fs.ensureDir(iconsDir);
 
-    // DÜZELTME: URL'nin başında http/https yoksa ekle, varsa dokunma.
     let normalizedUrl = appUrl.trim();
     if (!/^https?:\/\//i.test(normalizedUrl)) {
         normalizedUrl = 'https://' + normalizedUrl;
@@ -226,20 +225,40 @@ function createWebviewWindow(urlToLoad, appName) {
     const webviewWindow = new BrowserWindow({
         width: 1280, height: 800, minWidth: 800, minHeight: 600,
         title: appName,
-        backgroundColor: '#1c1c1e',
-        webPreferences: { webviewTag: true, preload: path.join(__dirname, 'webview-preload.js'), nodeIntegration: false, contextIsolation: true, },
+        backgroundColor: '#1c1c1e', // Yükleme ekranı arkaplanı
+        show: false, // Pencereyi başlangıçta gizle, hazır olunca göster
+        webPreferences: {
+            webviewTag: true,
+            preload: path.join(__dirname, 'webview-preload.js'),
+            nodeIntegration: false,
+            contextIsolation: true,
+        },
     });
-    
+
+    webviewWindow.once('ready-to-show', () => {
+        webviewWindow.show();
+    });
+
     webviewWindow.on('page-title-updated', (event) => {
         event.preventDefault();
     });
-    
+
     if (process.platform !== 'darwin') {
         webviewWindow.removeMenu();
     }
-    
+
+    const apps = store.get('apps', []);
+    const appData = apps.find(app => app.appName === appName);
+    const logoPath = appData ? appData.previewIconPath : '';
+
+    const partition = `persist:${appName.replace(/[^a-zA-Z0-9]/g, '')}`;
+
     webviewWindow.loadFile('webview.html', {
-        query: { url: encodeURIComponent(urlToLoad) }
+        query: {
+            url: encodeURIComponent(urlToLoad),
+            partition: partition,
+            logoPath: encodeURIComponent(logoPath)
+        }
     });
 }
 
@@ -283,7 +302,6 @@ app.whenReady().then(() => {
     }
 
     const urlToLoad = getArgValue('url');
-    // DÜZELTME: Önceki koddaki kritik yazım hatası giderildi.
     const appNameToLoad = getArgValue('app-name'); 
 
     if (urlToLoad && appNameToLoad) {
