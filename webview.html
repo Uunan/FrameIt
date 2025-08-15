@@ -2,24 +2,25 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Web Kapsülü</title>
+    <title>Web Kapsülü</title> <!-- Bu başlık artık kullanıcıya görünmeyecek -->
     <style>
         body, html {
             margin: 0;
             padding: 0;
             width: 100%;
             height: 100%;
-            overflow: hidden; /* Taşmayı önler */
+            overflow: hidden;
         }
         webview {
             width: 100%;
             height: 100%;
-            border: none; /* Kenarlık olmasın */
+            border: none;
         }
     </style>
 </head>
 <body>
-    <webview id="content"></webview>
-    <!-- webview-preload.js bu webview'e yüklenecek -->
+    <!-- YENİ: preload attribute eklendi -->
+    <webview id="content" preload="./guest-preload.js"></webview>
+    <script src="./webview-preload.js"></script>
 </body>
 </html>

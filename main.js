@@ -1,6 +1,6 @@
-// --- START OF FILE main.js (İKON SORUNU VE PLATFORMA ÖZEL GÜNCELLEME DÜZELTİLDİ) ---
+// --- START OF FILE main.js (TÜM GÜNCELLEMELER DAHİL) ---
 
-const { app, BrowserWindow, ipcMain, dialog, nativeImage, Menu, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, nativeImage, Menu, shell } = require('electron'); // YENİ: shell eklendi
 const path = require('path');
 const fs = require('fs-extra');
 const { exec } = require('child_process');
@@ -10,15 +10,13 @@ const Store = require('electron-store');
 const png2icons = require('png2icons');
 const { autoUpdater } = require('electron-updater');
 
-// İndirme hatalarını önlemek için genel ayar
-autoUpdater.requestHeaders = { 'Accept': 'application/octet-stream' };
-
-const store = new Store({ defaults: { apps: [] } });
+const store = new Store({ defaults: { apps: [], ignoredUpdateVersion: null } }); // YENİ: ignoredUpdateVersion eklendi
 let controlPanelWindow;
 
 // =================================================================//
 // IPC KANALLARI (RENDERER İLE İLETİŞİM)
 // =================================================================//
+// ... (get-apps, delete-app, create-app, edit-app, open-file-dialog fonksiyonları aynı kalacak, onları değiştirmiyoruz) ...
 ipcMain.handle('open-file-dialog', async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog(controlPanelWindow, {
         title: 'Özel İkon Seç',
@@ -29,34 +27,22 @@ ipcMain.handle('open-file-dialog', async () => {
     return filePaths[0];
 });
 
-// DÜZELTİLDİ: macOS'ta ikonların görünmemesi sorununu çözen daha sağlam mantık
 ipcMain.handle('get-apps', async () => {
     const apps = store.get('apps', []);
     return await Promise.all(apps.map(async (app) => {
         let iconDataUrl = null;
         let iconPathToRead = null;
-
-        // 1. Öncelik her zaman kullanıcının seçtiği özel ikondur.
         if (app.customIconPath && await fs.pathExists(app.customIconPath)) {
             iconPathToRead = app.customIconPath;
-        } 
-        // 2. Eğer özel ikon yoksa, platforma göre ara.
-        else if (process.platform === 'darwin' && app.shortcutPath && await fs.pathExists(app.shortcutPath)) {
-            // macOS'ta ikon .app paketinin içindedir.
-            iconPathToRead = path.join(app.shortcutPath, 'Contents/Resources/icon.icns');
-        } 
-        else if (process.platform !== 'darwin' && app.iconPath && await fs.pathExists(app.iconPath)) {
-            // Windows/Linux için kaydedilen kalıcı ikon yolu.
+        } else if (app.iconPath && await fs.pathExists(app.iconPath)) {
             iconPathToRead = app.iconPath;
         }
-
         try {
-            if (iconPathToRead && await fs.pathExists(iconPathToRead)) {
+            if (iconPathToRead) {
                 const image = nativeImage.createFromPath(iconPathToRead);
                 if (!image.isEmpty()) iconDataUrl = image.resize({ width: 64, height: 64 }).toDataURL();
             }
         } catch (error) { console.error(`İkon okunamadı (${app.appName}):`, error); }
-        
         return { ...app, iconDataUrl };
     }));
 });
@@ -108,7 +94,15 @@ ipcMain.handle('edit-app', async (event, { appId, appName, appUrl, customIconPat
     }
 });
 
-// ... (generateShortcut ve platforma özel kısayol fonksiyonları DEĞİŞMEDİ) ...
+
+// YENİ: Arkaplan rengini ayarlamak için IPC kanalı
+ipcMain.on('set-background-color', (event, color) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    if (window && color) {
+        window.setBackgroundColor(color);
+    }
+});
+// ... (generateShortcut ve platforma özel shortcut fonksiyonları da aynı kalacak) ...
 async function generateShortcut(appName, appUrl, customIconPath = null) {
     const tempDir = path.join(app.getPath('temp'), `frameit-creator-${Date.now()}`);
     await fs.ensureDir(tempDir);
@@ -158,6 +152,7 @@ async function generateShortcut(appName, appUrl, customIconPath = null) {
         throw e;
     }
 }
+
 async function createMacShortcut(appName, appUrl, icnsPath) {
     const userApplicationsPath = path.join(app.getPath('home'), 'Applications');
     await fs.ensureDir(userApplicationsPath);
@@ -171,10 +166,12 @@ async function createMacShortcut(appName, appUrl, icnsPath) {
     await fs.chmod(scriptPath, '755');
     const plistContent = `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>CFBundleExecutable</key><string>${appName}</string><key>CFBundleIconFile</key><string>icon.icns</string><key>CFBundleIdentifier</key><string>com.uunan.frameit.${appName.replace(/[^a-zA-Z0-9]/g, '')}</string></dict></plist>`;
     await fs.writeFile(path.join(newAppPath, 'Contents/Info.plist'), plistContent.trim());
-    await fs.copy(icnsPath, path.join(newAppPath, 'Contents/Resources/icon.icns'));
+    const finalIconPath = path.join(newAppPath, 'Contents/Resources/icon.icns');
+    await fs.copy(icnsPath, finalIconPath);
     await new Promise((resolve) => exec(`touch "${newAppPath}"`, () => resolve()));
-    return { shortcutPath: newAppPath };
+    return { shortcutPath: newAppPath, iconPath: finalIconPath };
 }
+
 async function createWindowsShortcut(appName, appUrl, tempIcoPath) {
     const iconsDir = path.join(app.getPath('userData'), 'icons');
     await fs.ensureDir(iconsDir);
@@ -200,6 +197,7 @@ async function createWindowsShortcut(appName, appUrl, tempIcoPath) {
         });
     });
 }
+
 async function createLinuxShortcut(appName, appUrl, pngPath) {
     const appIdentifier = appName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
     const userApplicationsPath = path.join(app.getPath('home'), '.local/share/applications');
@@ -219,28 +217,29 @@ async function createLinuxShortcut(appName, appUrl, pngPath) {
 function createWebviewWindow(urlToLoad, appName) {
     const webviewWindow = new BrowserWindow({
         width: 1280, height: 800, minWidth: 800, minHeight: 600,
-        title: appName,
+        title: appName, // DÜZELTME: Başlık artık sabit
+        backgroundColor: '#1c1c1e', // Başlangıç rengi
         webPreferences: { webviewTag: true, preload: path.join(__dirname, 'webview-preload.js'), nodeIntegration: false, contextIsolation: true, },
     });
     
-    webviewWindow.on('page-title-updated', (event) => {
-        event.preventDefault();
-    });
+    // DÜZELTME: Bu listener kaldırıldı, böylece başlık web sitesine göre değişmez.
+    // webviewWindow.on('page-title-updated', (event) => {
+    //     event.preventDefault();
+    // });
     
     if (process.platform !== 'darwin') {
         webviewWindow.removeMenu();
     }
+    
+    webviewWindow.loadFile('webview.html', {
+        query: { url: encodeURIComponent(urlToLoad) }
+    });
 }
 
 function createControlPanel() {
-    const iconPath = process.platform === 'darwin' 
-        ? path.join(__dirname, 'build/icon.icns') 
-        : path.join(__dirname, 'build/icon.ico');
-
     controlPanelWindow = new BrowserWindow({
         width: 800, height: 600, minWidth: 600, minHeight: 400,
         title: "FrameIt Yöneticisi",
-        icon: iconPath,
         backgroundColor: '#1c1c1e',
         webPreferences: { preload: path.join(__dirname, 'preload.js'), nodeIntegration: false, contextIsolation: true, },
     });
@@ -282,44 +281,70 @@ app.whenReady().then(() => {
         createWebviewWindow(urlToLoad, appNameToLoad);
     } else {
         createControlPanel();
-        // Sadece kontrol paneli açıldığında güncellemeleri kontrol et.
-        
-        // === WİNDOWS GÜNCELLEME MANTIĞI: OTOMATİK İNDİRME ===
+        // DÜZELTME: Sadece Windows'ta otomatik indir ve bildir.
         if (process.platform === 'win32') {
-            autoUpdater.on('update-downloaded', (info) => {
-                dialog.showMessageBox({
-                    type: 'info',
-                    buttons: ['Yeniden Başlat', 'Daha Sonra'],
-                    title: 'Uygulama Güncellemesi',
-                    message: 'Yeni bir sürüm kuruluma hazır.',
-                    detail: 'Değişikliklerin etkili olması için uygulamayı şimdi yeniden başlatın.'
-                }).then((returnValue) => {
-                    if (returnValue.response === 0) autoUpdater.quitAndInstall();
-                });
-            });
-            // autoDownload varsayılan olarak 'true' olduğu için ek bir ayar gerekmez.
-            autoUpdater.checkForUpdates();
-        } 
-        
-        // === MACOS GÜNCELLEME MANTIĞI: BİLDİRİM VE YÖNLENDİRME ===
-        else if (process.platform === 'darwin') {
-            autoUpdater.autoDownload = false; // Otomatik indirmeyi kapat
-            autoUpdater.on('update-available', (info) => {
-                dialog.showMessageBox({
-                    type: 'info',
-                    title: 'Güncelleme Mevcut',
-                    message: `FrameIt'in yeni bir sürümü (${info.version}) mevcut.`,
-                    detail: 'En son özellikleri ve düzeltmeleri almak için şimdi indirmek ister misiniz?',
-                    buttons: ['Evet, İndir', 'Hayır, Sonra']
-                }).then(result => {
-                    if (result.response === 0) {
-                        shell.openExternal('https://github.com/Uunan/FrameIt/releases/latest');
-                    }
-                });
-            });
+            autoUpdater.checkForUpdatesAndNotify();
+        } else {
+            // Diğer platformlarda (özellikle macOS) sadece kontrol et.
             autoUpdater.checkForUpdates();
         }
     }
+});
+
+// OTOMATİK GÜNCELLEME OLAYLARI (YENİDEN DÜZENLENDİ)
+autoUpdater.on('update-available', (info) => {
+  console.log('Yeni bir güncelleme mevcut:', info.version);
+  
+  // SADECE macOS için özel bildirim
+  if (process.platform === 'darwin') {
+    const ignoredVersion = store.get('ignoredUpdateVersion');
+    if (info.version === ignoredVersion) {
+        console.log(`Kullanıcı ${info.version} sürümünü atlamayı seçmiş.`);
+        return;
+    }
+
+    dialog.showMessageBox({
+        type: 'info',
+        buttons: ['Evet, Github\'a Git', 'Hayır, Teşekkürler'],
+        title: 'Güncelleme Mevcut',
+        message: `Yeni Bir Sürüm Bulundu`,
+        detail: `FrameIt'in yeni bir sürümü (${info.version}) mevcut. Güncelleme sayfasına gidip indirmek ister misiniz?`,
+        checkboxLabel: 'Bu sürümü bir daha gösterme',
+        checkboxChecked: false,
+    }).then(result => {
+        if (result.checkboxChecked) {
+            store.set('ignoredUpdateVersion', info.version);
+        }
+        // "Evet, Github'a Git" butonuna basıldıysa (index 0)
+        if (result.response === 0) {
+            shell.openExternal('https://github.com/Uunan/FrameIt/releases/latest');
+        }
+    });
+  }
+});
+
+// SADECE Windows için olan indirme sonrası bildirim
+autoUpdater.on('update-downloaded', (info) => {
+    if (process.platform !== 'win32') return;
+
+    console.log('Güncelleme indirildi, kuruluma hazır.');
+    const dialogOpts = {
+        type: 'info',
+        buttons: ['Yeniden Başlat', 'Daha Sonra'],
+        title: 'Uygulama Güncellemesi',
+        message: process.platform === 'win32' ? info.releaseNotes : info.releaseName,
+        detail: 'Yeni bir sürüm indirildi. Değişikliklerin etkili olması için uygulamayı şimdi yeniden başlatın.'
+    };
+
+    dialog.showMessageBox(dialogOpts).then((returnValue) => {
+        if (returnValue.response === 0) {
+            autoUpdater.quitAndInstall();
+        }
+    });
+});
+
+autoUpdater.on('error', (err) => {
+  console.error('Güncelleme hatası:', err ? (err.stack || err).toString() : 'Bilinmeyen Hata');
 });
 
 
