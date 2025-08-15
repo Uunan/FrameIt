@@ -1,4 +1,4 @@
-// --- START OF FILE main.js (Platforma Özel Güncelleme ve İkon Düzeltmesi) ---
+// --- START OF FILE main.js (macOS İkon ve Yapıştırma Düzeltmesi + Platforma Özel Güncelleme) ---
 
 const { app, BrowserWindow, ipcMain, dialog, nativeImage, Menu, shell } = require('electron');
 const path = require('path');
@@ -11,13 +11,15 @@ const png2icons = require('png2icons');
 const { autoUpdater } = require('electron-updater');
 
 // =========================================================================
-// PLATFORMA ÖZEL GÜNCELLEME AYARI
+// GÜNCELLEME ve İKON AYARLARI
 // =========================================================================
-// Windows dışındaki platformlarda (macOS, Linux) otomatik indirmeyi kapatıyoruz.
 if (process.platform !== 'win32') {
     autoUpdater.autoDownload = false;
 }
 autoUpdater.requestHeaders = { 'Accept': 'application/octet-stream' };
+// YENİ: Oluşturulan uygulama ikonları için merkezi bir klasör yolu
+const appIconsDir = path.join(app.getPath('userData'), 'app_icons');
+fs.ensureDirSync(appIconsDir); // Uygulama başlarken bu klasörün var olduğundan emin ol
 // =========================================================================
 
 const store = new Store({ defaults: { apps: [] } });
@@ -27,34 +29,12 @@ let controlPanelWindow;
 // IPC KANALLARI (RENDERER İLE İLETİŞİM)
 // =================================================================//
 
-ipcMain.handle('open-file-dialog', async () => {
-    const { canceled, filePaths } = await dialog.showOpenDialog(controlPanelWindow, {
-        title: 'Özel İkon Seç',
-        properties: ['openFile'],
-        filters: [{ name: 'Resim Dosyaları', extensions: ['png', 'jpg', 'jpeg', 'ico', 'icns'] }]
-    });
-    if (canceled || filePaths.length === 0) return null;
-    return filePaths[0];
-});
-
 ipcMain.handle('get-apps', async () => {
     const apps = store.get('apps', []);
     return await Promise.all(apps.map(async (app) => {
         let iconDataUrl = null;
-        let iconPathToRead = null;
-
-        // 1. Öncelik: Kullanıcının seçtiği özel ikon
-        if (app.customIconPath && await fs.pathExists(app.customIconPath)) {
-            iconPathToRead = app.customIconPath;
-        } 
-        // 2. Öncelik: macOS için .app paketinin içindeki ikon
-        else if (process.platform === 'darwin' && app.shortcutPath && await fs.pathExists(app.shortcutPath)) {
-            iconPathToRead = path.join(app.shortcutPath, 'Contents/Resources/icon.icns');
-        } 
-        // 3. Öncelik: Windows/Linux için kaydedilmiş ikon yolu
-        else if (app.iconPath && await fs.pathExists(app.iconPath)) {
-            iconPathToRead = app.iconPath;
-        }
+        // DEĞİŞTİ: Artık ikonu sadece merkezi klasörden okuyoruz. Çok daha güvenilir.
+        const iconPathToRead = app.iconPath;
 
         try {
             if (iconPathToRead && await fs.pathExists(iconPathToRead)) {
@@ -75,13 +55,19 @@ ipcMain.handle('delete-app', async (event, appId) => {
         const apps = store.get('apps');
         const appToDelete = apps.find(app => app.id === appId);
         if (!appToDelete) throw new Error('Silinecek uygulama bulunamadı.');
-        if (appToDelete.shortcutPath) await fs.remove(appToDelete.shortcutPath).catch(err => console.error(`Kısayol silinemedi (${appToDelete.shortcutPath}): ${err.message}`));
-        if (appToDelete.iconPath) await fs.remove(appToDelete.iconPath).catch(err => console.error(`İkon silinemedi (${appToDelete.iconPath}): ${err.message}`));
+
+        await fs.remove(appToDelete.shortcutPath).catch(err => console.error(`Kısayol silinemedi: ${err.message}`));
+        // YENİ: Merkezi klasörden ikonu da sil
+        if (appToDelete.iconPath) {
+            await fs.remove(appToDelete.iconPath).catch(err => console.error(`İkon silinemedi: ${err.message}`));
+        }
+        
         store.set('apps', apps.filter(app => app.id !== appId));
         return { success: true };
     } catch (error) { return { success: false, error: error.message }; }
 });
 
+// ... (create-app ve edit-app aynı kalıyor) ...
 ipcMain.handle('create-app', async (event, { appName, appUrl }) => {
     try {
         const paths = await generateShortcut(appName, appUrl, null);
@@ -117,7 +103,6 @@ ipcMain.handle('edit-app', async (event, { appId, appName, appUrl, customIconPat
     }
 });
 
-// ... (generateShortcut ve platforma özel fonksiyonlar aynı kalıyor) ...
 
 async function generateShortcut(appName, appUrl, customIconPath = null) {
     const tempDir = path.join(app.getPath('temp'), `frameit-creator-${Date.now()}`);
@@ -141,33 +126,48 @@ async function generateShortcut(appName, appUrl, customIconPath = null) {
         const cleanPngBuffer = await image.resize(256, 256).getBufferAsync(Jimp.MIME_PNG);
 
         let paths;
+        let tempIconPath;
+        let permanentIconPath;
+        const appIdentifier = `${Date.now()}-${appName.replace(/[^a-zA-Z0-9]/g, '')}`;
+
         switch(process.platform) {
             case 'darwin':
-                const icnsPath = path.join(tempDir, 'icon.icns');
+                tempIconPath = path.join(tempDir, 'icon.icns');
                 const icnsBuffer = png2icons.createICNS(cleanPngBuffer, png2icons.BILINEAR, 0);
-                await fs.writeFile(icnsPath, icnsBuffer);
-                paths = await createMacShortcut(appName, normalizedUrl, icnsPath);
+                await fs.writeFile(tempIconPath, icnsBuffer);
+                paths = await createMacShortcut(appName, normalizedUrl, tempIconPath);
+                permanentIconPath = path.join(appIconsDir, `${appIdentifier}.icns`);
                 break;
             case 'win32':
-                const icoPath = path.join(tempDir, 'icon.ico');
+                tempIconPath = path.join(tempDir, 'icon.ico');
                 const icoBuffer = png2icons.createICO(cleanPngBuffer, png2icons.BILINEAR, 0, false);
-                await fs.writeFile(icoPath, icoBuffer);
-                paths = await createWindowsShortcut(appName, normalizedUrl, icoPath);
+                await fs.writeFile(tempIconPath, icoBuffer);
+                paths = await createWindowsShortcut(appName, normalizedUrl, tempIconPath);
+                permanentIconPath = paths.iconPath; // Windows fonksiyonu zaten kalıcı yol döndürüyor
                 break;
             case 'linux':
-                const pngPath = path.join(tempDir, 'icon.png');
-                await fs.writeFile(pngPath, cleanPngBuffer);
-                paths = await createLinuxShortcut(appName, normalizedUrl, pngPath);
+                tempIconPath = path.join(tempDir, 'icon.png');
+                await fs.writeFile(tempIconPath, cleanPngBuffer);
+                paths = await createLinuxShortcut(appName, normalizedUrl, tempIconPath);
+                permanentIconPath = path.join(appIconsDir, `${appIdentifier}.png`);
                 break;
             default: throw new Error('Bu işletim sistemi desteklenmiyor.');
         }
+
+        // DEĞİŞTİ: İkonu merkezi klasöre kopyala (Windows hariç, o zaten yapıyor)
+        if (process.platform !== 'win32') {
+            await fs.copy(tempIconPath, permanentIconPath);
+        }
+        
         await fs.remove(tempDir);
-        return paths;
+        return { ...paths, iconPath: permanentIconPath }; // Her zaman kalıcı ikon yolunu döndür
     } catch (e) {
         await fs.remove(tempDir).catch(console.error);
         throw e;
     }
 }
+
+// ... (createMacShortcut, createWindowsShortcut, createLinuxShortcut fonksiyonları aynı kalıyor) ...
 
 async function createMacShortcut(appName, appUrl, icnsPath) {
     const userApplicationsPath = path.join(app.getPath('home'), 'Applications');
@@ -188,9 +188,7 @@ async function createMacShortcut(appName, appUrl, icnsPath) {
 }
 
 async function createWindowsShortcut(appName, appUrl, tempIcoPath) {
-    const iconsDir = path.join(app.getPath('userData'), 'icons');
-    await fs.ensureDir(iconsDir);
-    const permanentIcoPath = path.join(iconsDir, `${Date.now()}-${appName.replace(/[^a-zA-Z0-9]/g, '')}.ico`);
+    const permanentIcoPath = path.join(appIconsDir, `${Date.now()}-${appName.replace(/[^a-zA-Z0-9]/g, '')}.ico`);
     await fs.copy(tempIcoPath, permanentIcoPath);
     const desktopPath = app.getPath('desktop');
     const shortcutPath = path.join(desktopPath, `${appName}.lnk`);
@@ -216,9 +214,7 @@ async function createWindowsShortcut(appName, appUrl, tempIcoPath) {
 async function createLinuxShortcut(appName, appUrl, pngPath) {
     const appIdentifier = appName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
     const userApplicationsPath = path.join(app.getPath('home'), '.local/share/applications');
-    const iconDir = path.join(app.getPath('home'), '.local/share/icons/hicolor/256x256/apps');
-    await fs.ensureDir(iconDir);
-    const finalPngPath = path.join(iconDir, `${appIdentifier}.png`);
+    const finalPngPath = path.join(appIconsDir, `${appIdentifier}.png`);
     await fs.copy(pngPath, finalPngPath);
     const shortcutPath = path.join(userApplicationsPath, `${appIdentifier}.desktop`);
     const desktopFileContent = `[Desktop Entry]\nVersion=1.0\nType=Application\nName=${appName}\nComment=${appName}\nExec="${app.getPath('exe')}" --app-name="${appName}" --url="${appUrl}"\nIcon=${finalPngPath}\nTerminal=false\nCategories=Network;WebBrowser;`;
@@ -227,6 +223,7 @@ async function createLinuxShortcut(appName, appUrl, pngPath) {
     await fs.chmod(shortcutPath, '755');
     return { shortcutPath, iconPath: finalPngPath };
 }
+
 
 // PENCERE YÖNETİMİ VE YAŞAM DÖNGÜSÜ
 function createWebviewWindow(urlToLoad, appName) {
@@ -279,11 +276,36 @@ const getArgValue = (argName) => {
 
 // UYGULAMA YAŞAM DÖNGÜSÜ
 app.whenReady().then(() => {
+    // DEĞİŞTİ: macOS için tam bir "Edit" menüsü ekleyerek kopyala/yapıştır sorununu çöz
     if (process.platform === 'darwin') {
-        const template = [{
-            label: app.getName(),
-            submenu: [{ role: 'quit' }]
-        }];
+        const template = [
+            {
+                label: app.getName(),
+                submenu: [
+                    { role: 'about' },
+                    { type: 'separator' },
+                    { role: 'services' },
+                    { type: 'separator' },
+                    { role: 'hide' },
+                    { role: 'hideOthers' },
+                    { role: 'unhide' },
+                    { type: 'separator' },
+                    { role: 'quit' }
+                ]
+            },
+            {
+                label: 'Edit',
+                submenu: [
+                    { role: 'undo' },
+                    { role: 'redo' },
+                    { type: 'separator' },
+                    { role: 'cut' },
+                    { role: 'copy' },
+                    { role: 'paste' },
+                    { role: 'selectAll' }
+                ]
+            }
+        ];
         const menu = Menu.buildFromTemplate(template);
         Menu.setApplicationMenu(menu);
     }
@@ -299,9 +321,8 @@ app.whenReady().then(() => {
     }
 });
 
-// ================= PLATFORMA ÖZEL GÜNCELLEME MANTIĞI =================
+// PLATFORMA ÖZEL GÜNCELLEME MANTIĞI
 if (process.platform === 'win32') {
-    // WINDOWS: Otomatik indir ve yeniden başlatmayı sor
     autoUpdater.on('update-downloaded', (info) => {
         dialog.showMessageBox({
             type: 'info',
@@ -316,7 +337,6 @@ if (process.platform === 'win32') {
         });
     });
 } else {
-    // MACOS & LINUX: Yeni sürüm olduğunu bildir ve GitHub'a yönlendir
     autoUpdater.on('update-available', (info) => {
         dialog.showMessageBox({
             type: 'info',
@@ -331,7 +351,6 @@ if (process.platform === 'win32') {
         });
     });
 }
-// ==============================================================================
 
 app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
