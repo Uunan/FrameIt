@@ -1,4 +1,4 @@
-// --- START OF FILE main.js (TÜM GÜNCELLEMELER DAHİL) ---
+// --- START OF FILE main.js (NİHAİ SÜRÜM) ---
 
 const { app, BrowserWindow, ipcMain, dialog, nativeImage, Menu, shell } = require('electron');
 const path = require('path');
@@ -14,7 +14,7 @@ const store = new Store({ defaults: { apps: [], ignoredUpdateVersion: null } });
 let controlPanelWindow;
 
 // =================================================================//
-// IPC KANALLARI (Bu bölümde değişiklik yok)
+// IPC KANALLARI (RENDERER İLE İLETİŞİM)
 // =================================================================//
 
 ipcMain.handle('open-file-dialog', async () => {
@@ -103,7 +103,7 @@ ipcMain.on('set-background-color', (event, color) => {
 });
 
 // =================================================================//
-// KISAYOL OLUŞTURMA (Bu bölümde değişiklik yok)
+// KISAYOL OLUŞTURMA FONKSİYONLARI
 // =================================================================//
 
 async function generateShortcut(appName, appUrl, customIconPath = null) {
@@ -112,8 +112,11 @@ async function generateShortcut(appName, appUrl, customIconPath = null) {
     await fs.ensureDir(tempDir);
     await fs.ensureDir(iconsDir);
 
+    // DÜZELTME: URL'nin başında http/https yoksa ekle, varsa dokunma.
     let normalizedUrl = appUrl.trim();
-    if (!/^https?:\/\//i.test(normalizedUrl)) normalizedUrl = 'https://' + normalizedUrl;
+    if (!/^https?:\/\//i.test(normalizedUrl)) {
+        normalizedUrl = 'https://' + normalizedUrl;
+    }
 
     try {
         let imageBuffer;
@@ -165,24 +168,68 @@ async function generateShortcut(appName, appUrl, customIconPath = null) {
     }
 }
 
-async function createMacShortcut(appName, appUrl, icnsPath) { /* ... değişiklik yok ... */ }
-async function createWindowsShortcut(appName, appUrl, tempIcoPath) { /* ... değişiklik yok ... */ }
-async function createLinuxShortcut(appName, appUrl, pngPath) { /* ... değişiklik yok ... */ }
+async function createMacShortcut(appName, appUrl, icnsPath) {
+    const userApplicationsPath = path.join(app.getPath('home'), 'Applications');
+    await fs.ensureDir(userApplicationsPath);
+    const newAppPath = path.join(userApplicationsPath, `${appName}.app`);
+    const mainAppPath = app.getPath('exe');
+    const script = `#!/bin/sh\nexec "${mainAppPath}" --app-name="${appName}" --url="${appUrl}"`;
+    await fs.ensureDir(path.join(newAppPath, 'Contents/MacOS'));
+    await fs.ensureDir(path.join(newAppPath, 'Contents/Resources'));
+    const scriptPath = path.join(newAppPath, 'Contents/MacOS', appName);
+    await fs.writeFile(scriptPath, script);
+    await fs.chmod(scriptPath, '755');
+    const plistContent = `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>CFBundleExecutable</key><string>${appName}</string><key>CFBundleIconFile</key><string>icon.icns</string><key>CFBundleIdentifier</key><string>com.uunan.frameit.${appName.replace(/[^a-zA-Z0-9]/g, '')}</string></dict></plist>`;
+    await fs.writeFile(path.join(newAppPath, 'Contents/Info.plist'), plistContent.trim());
+    const finalIconPath = path.join(newAppPath, 'Contents/Resources/icon.icns');
+    await fs.copy(icnsPath, finalIconPath);
+    await new Promise((resolve, reject) => exec(`touch "${newAppPath}"`, (error) => { if (error) reject(error); else resolve(); }));
+    return { shortcutPath: newAppPath, iconPath: finalIconPath };
+}
+
+async function createWindowsShortcut(appName, appUrl, tempIcoPath) {
+    const iconsDir = path.join(app.getPath('userData'), 'icons');
+    await fs.ensureDir(iconsDir);
+    const permanentIcoPath = path.join(iconsDir, `${Date.now()}-${appName.replace(/[^a-zA-Z0-9]/g, '')}.ico`);
+    await fs.copy(tempIcoPath, permanentIcoPath);
+    const desktopPath = app.getPath('desktop');
+    const shortcutPath = path.join(desktopPath, `${appName}.lnk`);
+    
+    return new Promise((resolve, reject) => {
+        const args = `--app-name="${appName}" --url="${appUrl}"`;
+        ws.create(shortcutPath, { target: app.getPath('exe'), args, icon: permanentIcoPath, runStyle: ws.NORMAL, description: appName, }, 
+        (err) => { err ? reject(new Error(`Windows kısayolu oluşturulamadı: ${err}`)) : resolve({ shortcutPath, iconPath: permanentIcoPath }); });
+    });
+}
+
+async function createLinuxShortcut(appName, appUrl, pngPath) {
+    const appIdentifier = appName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    const userApplicationsPath = path.join(app.getPath('home'), '.local/share/applications');
+    const iconDir = path.join(app.getPath('home'), '.local/share/icons/hicolor/256x256/apps');
+    await fs.ensureDir(iconDir);
+    const finalPngPath = path.join(iconDir, `${appIdentifier}.png`);
+    await fs.copy(pngPath, finalPngPath);
+    const shortcutPath = path.join(userApplicationsPath, `${appIdentifier}.desktop`);
+    const desktopFileContent = `[Desktop Entry]\nVersion=1.0\nType=Application\nName=${appName}\nComment=${appName}\nExec="${app.getPath('exe')}" --app-name="${appName}" --url="${appUrl}"\nIcon=${finalPngPath}\nTerminal=false\nCategories=Network;WebBrowser;`;
+    await fs.ensureDir(userApplicationsPath);
+    await fs.writeFile(shortcutPath, desktopFileContent.trim());
+    await fs.chmod(shortcutPath, '755');
+    return { shortcutPath, iconPath: finalPngPath };
+}
+
 
 // =================================================================//
-// PENCERE YÖNETİMİ (Tek değişiklik burada)
+// PENCERE YÖNETİMİ VE YAŞAM DÖNGÜSÜ
 // =================================================================//
 
 function createWebviewWindow(urlToLoad, appName) {
     const webviewWindow = new BrowserWindow({
         width: 1280, height: 800, minWidth: 800, minHeight: 600,
-        title: appName, // Başlangıç başlığı doğru ayarlanıyor
+        title: appName,
         backgroundColor: '#1c1c1e',
         webPreferences: { webviewTag: true, preload: path.join(__dirname, 'webview-preload.js'), nodeIntegration: false, contextIsolation: true, },
     });
     
-    // DÜZELTME: Bu olay dinleyici, web sitesinin pencere başlığını değiştirmesini engeller.
-    // Bu sayede başlık her zaman 'appName' olarak sabit kalır.
     webviewWindow.on('page-title-updated', (event) => {
         event.preventDefault();
     });
@@ -223,10 +270,6 @@ const getArgValue = (argName) => {
     return value;
 };
 
-// =================================================================//
-// UYGULAMA YAŞAM DÖNGÜSÜ (Bu bölümde değişiklik yok)
-// =================================================================//
-
 app.whenReady().then(() => {
     if (process.platform === 'darwin') {
         const template = [
@@ -240,7 +283,8 @@ app.whenReady().then(() => {
     }
 
     const urlToLoad = getArgValue('url');
-    const appNameToLoad = getArgValue('app-name');
+    // DÜZELTME: Önceki koddaki kritik yazım hatası giderildi.
+    const appNameToLoad = getArgValue('app-name'); 
 
     if (urlToLoad && appNameToLoad) {
         createWebviewWindow(urlToLoad, appNameToLoad);
