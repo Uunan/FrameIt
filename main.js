@@ -1,6 +1,6 @@
-// --- START OF FILE main.js (MENÜLER KALDIRILMIŞ - ÜRETİM SÜRÜMÜ) ---
+// --- START OF FILE main.js (Platforma Özel Güncelleme ve İkon Düzeltmesi) ---
 
-const { app, BrowserWindow, ipcMain, dialog, nativeImage, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, nativeImage, Menu, shell } = require('electron');
 const path = require('path');
 const fs = require('fs-extra');
 const { exec } = require('child_process');
@@ -10,7 +10,15 @@ const Store = require('electron-store');
 const png2icons = require('png2icons');
 const { autoUpdater } = require('electron-updater');
 
+// =========================================================================
+// PLATFORMA ÖZEL GÜNCELLEME AYARI
+// =========================================================================
+// Windows dışındaki platformlarda (macOS, Linux) otomatik indirmeyi kapatıyoruz.
+if (process.platform !== 'win32') {
+    autoUpdater.autoDownload = false;
+}
 autoUpdater.requestHeaders = { 'Accept': 'application/octet-stream' };
+// =========================================================================
 
 const store = new Store({ defaults: { apps: [] } });
 let controlPanelWindow;
@@ -18,7 +26,6 @@ let controlPanelWindow;
 // =================================================================//
 // IPC KANALLARI (RENDERER İLE İLETİŞİM)
 // =================================================================//
-// ... (Bu bölümün tamamı aynı, değişiklik yok) ...
 
 ipcMain.handle('open-file-dialog', async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog(controlPanelWindow, {
@@ -35,19 +42,30 @@ ipcMain.handle('get-apps', async () => {
     return await Promise.all(apps.map(async (app) => {
         let iconDataUrl = null;
         let iconPathToRead = null;
+
+        // 1. Öncelik: Kullanıcının seçtiği özel ikon
         if (app.customIconPath && await fs.pathExists(app.customIconPath)) {
             iconPathToRead = app.customIconPath;
-        } else if (app.iconPath && await fs.pathExists(app.iconPath)) {
-            iconPathToRead = app.iconPath;
-        } else if (app.shortcutPath && process.platform === 'darwin' && await fs.pathExists(app.shortcutPath)) {
+        } 
+        // 2. Öncelik: macOS için .app paketinin içindeki ikon
+        else if (process.platform === 'darwin' && app.shortcutPath && await fs.pathExists(app.shortcutPath)) {
             iconPathToRead = path.join(app.shortcutPath, 'Contents/Resources/icon.icns');
+        } 
+        // 3. Öncelik: Windows/Linux için kaydedilmiş ikon yolu
+        else if (app.iconPath && await fs.pathExists(app.iconPath)) {
+            iconPathToRead = app.iconPath;
         }
+
         try {
-            if (iconPathToRead) {
+            if (iconPathToRead && await fs.pathExists(iconPathToRead)) {
                 const image = nativeImage.createFromPath(iconPathToRead);
-                if (!image.isEmpty()) iconDataUrl = image.resize({ width: 64, height: 64 }).toDataURL();
+                if (!image.isEmpty()) {
+                    iconDataUrl = image.resize({ width: 64, height: 64 }).toDataURL();
+                }
             }
-        } catch (error) { console.error(`İkon okunamadı (${app.appName}):`, error); }
+        } catch (error) { 
+            console.error(`İkon okunamadı (${app.appName} - ${iconPathToRead}):`, error); 
+        }
         return { ...app, iconDataUrl };
     }));
 });
@@ -98,6 +116,8 @@ ipcMain.handle('edit-app', async (event, { appId, appName, appUrl, customIconPat
         return { success: false, error: error.message };
     }
 });
+
+// ... (generateShortcut ve platforma özel fonksiyonlar aynı kalıyor) ...
 
 async function generateShortcut(appName, appUrl, customIconPath = null) {
     const tempDir = path.join(app.getPath('temp'), `frameit-creator-${Date.now()}`);
@@ -220,26 +240,24 @@ function createWebviewWindow(urlToLoad, appName) {
         event.preventDefault();
     });
     
-    // GERİ GETİRİLDİ: Üretim sürümü için menüyü kaldır
     if (process.platform !== 'darwin') {
         webviewWindow.removeMenu();
     }
-    
-    webviewWindow.webContents.on('did-finish-load', () => {
-        webviewWindow.webContents.send('set-url', urlToLoad);
-    });
-    webviewWindow.loadFile('webview.html');
 }
 
 function createControlPanel() {
+    const iconPath = process.platform === 'darwin' 
+        ? path.join(__dirname, 'build/icon.icns') 
+        : path.join(__dirname, 'build/icon.ico');
+
     controlPanelWindow = new BrowserWindow({
         width: 800, height: 600, minWidth: 600, minHeight: 400,
         title: "FrameIt Yöneticisi",
+        icon: iconPath,
         backgroundColor: '#1c1c1e',
         webPreferences: { preload: path.join(__dirname, 'preload.js'), nodeIntegration: false, contextIsolation: true, },
     });
     
-    // GERİ GETİRİLDİ: Üretim sürümü için menüyü kaldır
     if (process.platform !== 'darwin') {
         controlPanelWindow.removeMenu();
     }
@@ -259,15 +277,8 @@ const getArgValue = (argName) => {
     return value;
 };
 
-function sendLogToUI(message) {
-    console.log(message);
-    if (controlPanelWindow) {
-        controlPanelWindow.webContents.send('update-log', message);
-    }
-}
-
+// UYGULAMA YAŞAM DÖNGÜSÜ
 app.whenReady().then(() => {
-    // macOS için menüyü minimal hale getir (View menüsü kaldırıldı)
     if (process.platform === 'darwin') {
         const template = [{
             label: app.getName(),
@@ -288,37 +299,39 @@ app.whenReady().then(() => {
     }
 });
 
-autoUpdater.on('checking-for-update', () => {
-    sendLogToUI('Güncelleme kontrol ediliyor...');
-});
-autoUpdater.on('update-available', (info) => {
-    sendLogToUI(`Güncelleme bulundu: ${info.version}`);
-});
-autoUpdater.on('update-not-available', (info) => {
-    sendLogToUI('Güncelleme mevcut değil.');
-});
-autoUpdater.on('error', (err) => {
-    sendLogToUI('Güncelleme hatası: ' + (err ? (err.stack || err).toString() : 'Bilinmeyen Hata'));
-});
-autoUpdater.on('download-progress', (progressObj) => {
-    let log_message = `İndirme hızı: ${Math.round(progressObj.bytesPerSecond / 1024)} KB/s`;
-    log_message = log_message + ` - İndirilen ${Math.round(progressObj.percent)}%`;
-    sendLogToUI(log_message);
-});
-autoUpdater.on('update-downloaded', (info) => {
-    sendLogToUI(`Güncelleme indirildi: ${info.version}. Kurulum için yeniden başlatılacak.`);
-    const dialogOpts = {
-        type: 'info',
-        buttons: ['Yeniden Başlat', 'Daha Sonra'],
-        title: 'Uygulama Güncellemesi',
-        message: 'Yeni bir sürüm kuruluma hazır.',
-        detail: 'Değişikliklerin etkili olması için uygulamayı şimdi yeniden başlatın.'
-    };
-    dialog.showMessageBox(dialogOpts).then((returnValue) => {
-        if (returnValue.response === 0) autoUpdater.quitAndInstall();
+// ================= PLATFORMA ÖZEL GÜNCELLEME MANTIĞI =================
+if (process.platform === 'win32') {
+    // WINDOWS: Otomatik indir ve yeniden başlatmayı sor
+    autoUpdater.on('update-downloaded', (info) => {
+        dialog.showMessageBox({
+            type: 'info',
+            title: 'Güncelleme Hazır',
+            message: `FrameIt'in yeni bir sürümü (${info.version}) indirildi.`,
+            detail: 'Değişikliklerin etkili olması için uygulamayı şimdi yeniden başlatın.',
+            buttons: ['Yeniden Başlat', 'Daha Sonra']
+        }).then(result => {
+            if (result.response === 0) {
+                autoUpdater.quitAndInstall();
+            }
+        });
     });
-});
-
+} else {
+    // MACOS & LINUX: Yeni sürüm olduğunu bildir ve GitHub'a yönlendir
+    autoUpdater.on('update-available', (info) => {
+        dialog.showMessageBox({
+            type: 'info',
+            title: 'Güncelleme Mevcut',
+            message: `FrameIt'in yeni bir sürümü (${info.version}) mevcut.`,
+            detail: 'En son özellikleri ve düzeltmeleri almak için şimdi indirmek ister misiniz?',
+            buttons: ['Evet, İndir', 'Hayır, Sonra']
+        }).then(result => {
+            if (result.response === 0) {
+                shell.openExternal('https://github.com/Uunan/FrameIt/releases/latest');
+            }
+        });
+    });
+}
+// ==============================================================================
 
 app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

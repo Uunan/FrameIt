@@ -1,7 +1,7 @@
 
 {
   "name": "frameit",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "description": "Favori web sitelerinizi tek bir tıkla bağımsız masaüstü uygulamalarına dönüştürün.",
   "main": "main.js",
   "author": "Uunan",
