@@ -1,6 +1,6 @@
 // --- START OF FILE main.js (TÜM GÜNCELLEMELER DAHİL) ---
 
-const { app, BrowserWindow, ipcMain, dialog, nativeImage, Menu, shell } = require('electron'); // YENİ: shell zaten vardı, emin olalım
+const { app, BrowserWindow, ipcMain, dialog, nativeImage, Menu, shell } = require('electron');
 const path = require('path');
 const fs = require('fs-extra');
 const { exec } = require('child_process');
@@ -18,7 +18,7 @@ let controlPanelWindow;
 // =================================================================//
 
 ipcMain.handle('open-file-dialog', async () => {
-    // ... (Bu fonksiyon değişmedi)
+    // ... (değişmedi)
     const { canceled, filePaths } = await dialog.showOpenDialog(controlPanelWindow, {
         title: 'Özel İkon Seç',
         properties: ['openFile'],
@@ -28,14 +28,12 @@ ipcMain.handle('open-file-dialog', async () => {
     return filePaths[0];
 });
 
-// DÜZELTME: get-apps fonksiyonu tamamen yeniden yazıldı. Artık platformdan bağımsız,
-// merkezi olarak kaydedilmiş önizleme ikonlarını okuyor.
 ipcMain.handle('get-apps', async () => {
+    // ... (değişmedi)
     const apps = store.get('apps', []);
     return await Promise.all(apps.map(async (app) => {
         let iconDataUrl = null;
         try {
-            // Sadece merkezi önizleme ikonunu kontrol et
             if (app.previewIconPath && await fs.pathExists(app.previewIconPath)) {
                 const buffer = await fs.readFile(app.previewIconPath);
                 iconDataUrl = `data:image/png;base64,${buffer.toString('base64')}`;
@@ -47,14 +45,13 @@ ipcMain.handle('get-apps', async () => {
     }));
 });
 
-// DÜZELTME: delete-app fonksiyonu, önizleme ikonunu da silecek şekilde güncellendi.
 ipcMain.handle('delete-app', async (event, appId) => {
+    // ... (değişmedi)
     try {
         const apps = store.get('apps');
         const appToDelete = apps.find(app => app.id === appId);
         if (!appToDelete) throw new Error('Silinecek uygulama bulunamadı.');
         
-        // Kısayol, ana ikon ve önizleme ikonunu sil
         if (appToDelete.shortcutPath) await fs.remove(appToDelete.shortcutPath).catch(err => console.error(`Kısayol silinemedi: ${err.message}`));
         if (appToDelete.iconPath) await fs.remove(appToDelete.iconPath).catch(err => console.error(`İkon silinemedi: ${err.message}`));
         if (appToDelete.previewIconPath) await fs.remove(appToDelete.previewIconPath).catch(err => console.error(`Önizleme ikonu silinemedi: ${err.message}`));
@@ -65,7 +62,7 @@ ipcMain.handle('delete-app', async (event, appId) => {
 });
 
 ipcMain.handle('create-app', async (event, { appName, appUrl }) => {
-    // ... (Bu fonksiyon değişmedi, generateShortcut'tan gelen yeni path'i otomatik alacak)
+    // ... (değişmedi)
     try {
         const paths = await generateShortcut(appName, appUrl, null);
         const newApp = { id: Date.now().toString(), appName, appUrl, ...paths };
@@ -79,14 +76,13 @@ ipcMain.handle('create-app', async (event, { appName, appUrl }) => {
 });
 
 ipcMain.handle('edit-app', async (event, { appId, appName, appUrl, customIconPath }) => {
-    // ... (Bu fonksiyon değişmedi, generateShortcut'tan gelen yeni path'leri otomatik alacak)
+    // ... (değişmedi)
     try {
         const apps = store.get('apps');
         const appIndex = apps.findIndex(app => app.id === appId);
         if (appIndex === -1) throw new Error("Düzenlenecek uygulama bulunamadı.");
         const oldApp = apps[appIndex];
 
-        // DÜZELTME: Eski önizleme ikonunu da sil
         if (oldApp.previewIconPath) await fs.remove(oldApp.previewIconPath).catch(err => console.error(`Eski önizleme ikonu silinemedi: ${err.message}`));
         if (oldApp.shortcutPath) await fs.remove(oldApp.shortcutPath).catch(err => console.error(`Eski kısayol silinemedi: ${err.message}`));
         if (oldApp.iconPath && oldApp.iconPath !== customIconPath) await fs.remove(oldApp.iconPath).catch(err => console.error(`Eski ikon silinemedi: ${err.message}`));
@@ -105,19 +101,19 @@ ipcMain.handle('edit-app', async (event, { appId, appName, appUrl, customIconPat
 });
 
 ipcMain.on('set-background-color', (event, color) => {
-    // ... (Bu fonksiyon değişmedi)
+    // ... (değişmedi)
     const window = BrowserWindow.fromWebContents(event.sender);
     if (window && color) {
         window.setBackgroundColor(color);
     }
 });
 
-// DÜZELTME: generateShortcut fonksiyonu artık önizleme ikonu da oluşturup yolunu döndürüyor.
 async function generateShortcut(appName, appUrl, customIconPath = null) {
+    // ... (değişmedi)
     const tempDir = path.join(app.getPath('temp'), `frameit-creator-${Date.now()}`);
-    const iconsDir = path.join(app.getPath('userData'), 'icons'); // Merkezi ikon klasörü
+    const iconsDir = path.join(app.getPath('userData'), 'icons');
     await fs.ensureDir(tempDir);
-    await fs.ensureDir(iconsDir); // Klasörün var olduğundan emin ol
+    await fs.ensureDir(iconsDir);
 
     let normalizedUrl = appUrl.trim();
     if (!/^https?:\/\//i.test(normalizedUrl)) normalizedUrl = 'https://' + normalizedUrl;
@@ -136,7 +132,6 @@ async function generateShortcut(appName, appUrl, customIconPath = null) {
 
         const image = await Jimp.read(imageBuffer);
         
-        // YENİ: 64x64 boyutunda bir önizleme ikonu oluştur ve merkezi klasöre kaydet
         const previewIconName = `preview-${Date.now()}-${appName.replace(/[^a-zA-Z0-9]/g, '')}.png`;
         const previewIconPath = path.join(iconsDir, previewIconName);
         await image.clone().resize(64, 64).writeAsync(previewIconPath);
@@ -166,7 +161,6 @@ async function generateShortcut(appName, appUrl, customIconPath = null) {
         }
 
         await fs.remove(tempDir);
-        // Dönen objeye önizleme ikonunun yolunu da ekle
         return { ...paths, previewIconPath };
     } catch (e) {
         await fs.remove(tempDir).catch(console.error);
@@ -174,8 +168,8 @@ async function generateShortcut(appName, appUrl, customIconPath = null) {
     }
 }
 
-// ... (createMacShortcut, createWindowsShortcut, createLinuxShortcut fonksiyonları değişmedi) ...
 async function createMacShortcut(appName, appUrl, icnsPath) {
+    // ... (değişmedi)
     const userApplicationsPath = path.join(app.getPath('home'), 'Applications');
     await fs.ensureDir(userApplicationsPath);
     const newAppPath = path.join(userApplicationsPath, `${appName}.app`);
@@ -195,6 +189,7 @@ async function createMacShortcut(appName, appUrl, icnsPath) {
 }
 
 async function createWindowsShortcut(appName, appUrl, tempIcoPath) {
+    // ... (değişmedi)
     const iconsDir = path.join(app.getPath('userData'), 'icons');
     await fs.ensureDir(iconsDir);
     const permanentIcoPath = path.join(iconsDir, `${Date.now()}-${appName.replace(/[^a-zA-Z0-9]/g, '')}.ico`);
@@ -221,6 +216,7 @@ async function createWindowsShortcut(appName, appUrl, tempIcoPath) {
 }
 
 async function createLinuxShortcut(appName, appUrl, pngPath) {
+    // ... (değişmedi)
     const appIdentifier = appName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
     const userApplicationsPath = path.join(app.getPath('home'), '.local/share/applications');
     const iconDir = path.join(app.getPath('home'), '.local/share/icons/hicolor/256x256/apps');
@@ -235,9 +231,8 @@ async function createLinuxShortcut(appName, appUrl, pngPath) {
     return { shortcutPath, iconPath: finalPngPath };
 }
 
-// PENCERE YÖNETİMİ VE YAŞAM DÖNGÜSÜ
 function createWebviewWindow(urlToLoad, appName) {
-    // ... (Bu fonksiyon değişmedi)
+    // ... (değişmedi)
     const webviewWindow = new BrowserWindow({
         width: 1280, height: 800, minWidth: 800, minHeight: 600,
         title: appName,
@@ -255,7 +250,7 @@ function createWebviewWindow(urlToLoad, appName) {
 }
 
 function createControlPanel() {
-    // ... (Bu fonksiyon değişmedi)
+    // ... (değişmedi)
     controlPanelWindow = new BrowserWindow({
         width: 800, height: 600, minWidth: 600, minHeight: 400,
         title: "FrameIt Yöneticisi",
@@ -272,7 +267,7 @@ function createControlPanel() {
 }
 
 const getArgValue = (argName) => {
-    // ... (Bu fonksiyon değişmedi)
+    // ... (değişmedi)
     const prefix = `--${argName}=`;
     const arg = process.argv.find(arg => arg.startsWith(prefix));
     if (!arg) return null;
@@ -283,10 +278,8 @@ const getArgValue = (argName) => {
     return value;
 };
 
-// UYGULAMA YAŞAM DÖNGÜSÜ
 app.whenReady().then(() => {
-    // DÜZELTME: macOS için kopyala-yapıştır ve diğer standart işlemleri
-    // etkinleştiren tam bir menü oluşturuldu.
+    // ... (değişmedi)
     if (process.platform === 'darwin') {
         const template = [
             {
@@ -343,7 +336,7 @@ app.whenReady().then(() => {
     }
 
     const urlToLoad = getArgValue('url');
-    const appNameToLoad = getArgValue('app-name');
+    const appNameToLoad = get_ArgValue('app-name');
 
     if (urlToLoad && appNameToLoad) {
         createWebviewWindow(urlToLoad, appNameToLoad);
@@ -357,35 +350,36 @@ app.whenReady().then(() => {
     }
 });
 
-// ... (Otomatik güncelleme ve diğer app event'leri değişmedi) ...
 autoUpdater.on('update-available', (info) => {
-  console.log('Yeni bir güncelleme mevcut:', info.version);
-  if (process.platform === 'darwin') {
-    const ignoredVersion = store.get('ignoredUpdateVersion');
-    if (info.version === ignoredVersion) {
-        console.log(`Kullanıcı ${info.version} sürümünü atlamayı seçmiş.`);
-        return;
+    // ... (değişmedi)
+    console.log('Yeni bir güncelleme mevcut:', info.version);
+    if (process.platform === 'darwin') {
+        const ignoredVersion = store.get('ignoredUpdateVersion');
+        if (info.version === ignoredVersion) {
+            console.log(`Kullanıcı ${info.version} sürümünü atlamayı seçmiş.`);
+            return;
+        }
+        dialog.showMessageBox({
+            type: 'info',
+            buttons: ['Evet, Github\'a Git', 'Hayır, Teşekkürler'],
+            title: 'Güncelleme Mevcut',
+            message: `Yeni Bir Sürüm Bulundu`,
+            detail: `FrameIt'in yeni bir sürümü (${info.version}) mevcut. Güncelleme sayfasına gidip indirmek ister misiniz?`,
+            checkboxLabel: 'Bu sürümü bir daha gösterme',
+            checkboxChecked: false,
+        }).then(result => {
+            if (result.checkboxChecked) {
+                store.set('ignoredUpdateVersion', info.version);
+            }
+            if (result.response === 0) {
+                shell.openExternal('https://github.com/Uunan/FrameIt/releases/latest');
+            }
+        });
     }
-    dialog.showMessageBox({
-        type: 'info',
-        buttons: ['Evet, Github\'a Git', 'Hayır, Teşekkürler'],
-        title: 'Güncelleme Mevcut',
-        message: `Yeni Bir Sürüm Bulundu`,
-        detail: `FrameIt'in yeni bir sürümü (${info.version}) mevcut. Güncelleme sayfasına gidip indirmek ister misiniz?`,
-        checkboxLabel: 'Bu sürümü bir daha gösterme',
-        checkboxChecked: false,
-    }).then(result => {
-        if (result.checkboxChecked) {
-            store.set('ignoredUpdateVersion', info.version);
-        }
-        if (result.response === 0) {
-            shell.openExternal('https://github.com/Uunan/FrameIt/releases/latest');
-        }
-    });
-  }
 });
 
 autoUpdater.on('update-downloaded', (info) => {
+    // ... (değişmedi)
     if (process.platform !== 'win32') return;
     console.log('Güncelleme indirildi, kuruluma hazır.');
     const dialogOpts = {
@@ -403,10 +397,12 @@ autoUpdater.on('update-downloaded', (info) => {
 });
 
 autoUpdater.on('error', (err) => {
-  console.error('Güncelleme hatası:', err ? (err.stack || err).toString() : 'Bilinmeyen Hata');
+    // ... (değişmedi)
+    console.error('Güncelleme hatası:', err ? (err.stack || err).toString() : 'Bilinmeyen Hata');
 });
 
 app.on('activate', () => {
+    // ... (değişmedi)
     if (BrowserWindow.getAllWindows().length === 0) {
         const urlToLoad = getArgValue('url');
         if (!urlToLoad) {
@@ -415,8 +411,7 @@ app.on('activate', () => {
     }
 });
 
+// YENİ DÜZENLEME: Bu blok değiştirildi.
 app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') {
-        app.quit();
-    }
+    app.quit();
 });
