@@ -326,7 +326,7 @@ autoUpdater.on('update-available', (info) => {
         }
         dialog.showMessageBox({
             type: 'info',
-            buttons: ['Evet, Github\'a Git', 'Hayır, Teşekkürler'],
+            buttons: ['Evet, İndirme Bağlantısın\'a Git', 'Hayır, Teşekkürler'],
             title: 'Güncelleme Mevcut',
             message: `Yeni Bir Sürüm Bulundu`,
             detail: `FrameIt'in yeni bir sürümü (${info.version}) mevcut. Güncelleme sayfasına gidip indirmek ister misiniz?`,
@@ -337,7 +337,7 @@ autoUpdater.on('update-available', (info) => {
                 store.set('ignoredUpdateVersion', info.version);
             }
             if (result.response === 0) {
-                shell.openExternal('https://github.com/Uunan/FrameIt/releases/latest');
+                shell.openExternal('https://frameit.com.tr/downloads');
             }
         });
     }
